@@ -33,6 +33,10 @@ npm install @whatsmore-nf/dsh-plugin-pdf-edit
 
 ## 更新记录
 
+### v0.1.1
+
+- 修复 `cordis.patch.yml` 中插件名与 `package.json` 不一致导致加载失败的问题
+
 ### v0.1.0
 
 - 初始发布

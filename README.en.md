@@ -33,6 +33,10 @@ npm install @whatsmore-nf/dsh-plugin-pdf-edit
 
 ## Changelog
 
+### v0.1.1
+
+- Fix plugin name mismatch in `cordis.patch.yml` that caused load failure
+
 ### v0.1.0
 
 - Initial release
