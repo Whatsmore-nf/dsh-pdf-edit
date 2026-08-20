@@ -1,0 +1,12 @@
+- insert:
+    - id: pdf-edit
+      name: dsh-plugin-pdf-edit
+      config:
+        overflow: shrink
+        minFontSizePt: 6
+        background: none
+        backgroundRetention: none
+        strictTids: false
+        missingTidsUseOriginal: true
+        recoverColor: true
+        strictColor: false

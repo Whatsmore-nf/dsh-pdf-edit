@@ -1,0 +1,64 @@
+{
+  "name": "@whatsmore-nf/dsh-plugin-pdf-edit",
+  "version": "0.2.0",
+  "description": "Style-locked PDF editor plugin for DeepSeek Harness — AI edits text, native renderer preserves layout",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "files": [
+    "dist",
+    "cordis.patch.yml",
+    "LICENSE"
+  ],
+  "keywords": [
+    "dsh-plugin",
+    "deepseek-harness",
+    "dsh",
+    "pdf",
+    "pdf-edit",
+    "style-locked",
+    "ai-editor",
+    "cordis"
+  ],
+  "author": "whatsmore-nf",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Whatsmore-nf/dsh-pdf-edit.git"
+  },
+  "homepage": "https://github.com/Whatsmore-nf/dsh-pdf-edit#readme",
+  "bugs": {
+    "url": "https://github.com/Whatsmore-nf/dsh-pdf-edit/issues"
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    }
+  },
+  "scripts": {
+    "build": "tsc --skipLibCheck",
+    "dev": "tsc --watch --skipLibCheck",
+    "lint": "tsc --noEmit --skipLibCheck",
+    "prepublishOnly": "npm run build"
+  },
+  "dependencies": {
+    "@pdf-lib/fontkit": "^1.1.1",
+    "pdf-lib": "^1.17.1",
+    "pdfjs-dist": "^4.0.0"
+  },
+  "optionalDependencies": {
+    "puppeteer-core": "^23.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.19.43",
+    "typescript": "^5.9.3"
+  },
+  "peerDependencies": {
+    "pdfjs-dist": "^4.0.0"
+  },
+  "peerDependenciesMeta": {
+    "pdfjs-dist": {
+      "optional": true
+    }
+  }
+}

@@ -1,0 +1,10 @@
+src/
+tsconfig.json
+node_modules/
+dist/*.tsbuildinfo
+*.md
+!LICENSE
+.git/
+.gitignore
+修复.md
+qwen.md
