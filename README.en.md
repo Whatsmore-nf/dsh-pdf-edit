@@ -31,54 +31,17 @@ dsh plugin --profile web add @whatsmore-nf/dsh-plugin-pdf-edit@latest
 npm install @whatsmore-nf/dsh-plugin-pdf-edit
 ```
 
-## Usage
+## Changelog
 
-### 1. Activate
+### v0.1.0
 
-```typescript
-import { activate, tools } from "@whatsmore-nf/dsh-plugin-pdf-edit";
-
-activate({
-  apiKey: process.env.DEEPSEEK_API_KEY,
-  glossary: { "帐号": "账号", "数据中台": "数据平台" },
-});
-```
-
-### 2. Edit a Single Page
-
-```typescript
-const { outputPath, changed } = await tools["pdf-edit-page"].execute({
-  pdfPath: "./report.pdf",
-  pageNumber: 1,
-  instruction: "Fix typos and standardize terminology",
-});
-```
-
-### 3. Edit Entire Document
-
-```typescript
-const result = await tools["pdf-edit-document"].execute({
-  pdfPath: "./report.pdf",
-  instruction: "Replace all 「帐号」with 「账号」, fix grammar errors",
-});
-```
-
-### 4. Relayout
-
-```typescript
-await tools["pdf-edit-relayout"].execute({
-  pdfPath: "./report.pdf",
-  templateId: "academic",  // "academic" | "mobile" | "briefing"
-});
-```
-
-Three layout templates:
-
-| Template | Description |
-|---|---|
-| `academic` | Academic paper — A4 two-column, Times serif, 9.5pt body |
-| `mobile` | Mobile reading — 320×568 single-column, Helvetica, 13pt body |
-| `briefing` | Business briefing — A4 single-column, Helvetica, 10pt body |
+- Initial release
+- Style-locked editing: AI modifies text while preserving original layout
+- Native render mode: pdf-lib direct draw, zero browser dependency
+- CJK font auto-detection and embedding
+- Overflow handling: shrink / clip / wrap / reject
+- Glossary global substitution
+- Three relayout templates: academic / mobile / briefing
 
 ## How It Works
 

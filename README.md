@@ -31,54 +31,17 @@ dsh plugin --profile web add @whatsmore-nf/dsh-plugin-pdf-edit@latest
 npm install @whatsmore-nf/dsh-plugin-pdf-edit
 ```
 
-## 使用
+## 更新记录
 
-### 1. 激活插件
+### v0.1.0
 
-```typescript
-import { activate, tools } from "@whatsmore-nf/dsh-plugin-pdf-edit";
-
-activate({
-  apiKey: process.env.DEEPSEEK_API_KEY,  // 或直接写字符串
-  glossary: { "帐号": "账号", "数据中台": "数据平台" },  // 全局术语替换
-});
-```
-
-### 2. 编辑单页
-
-```typescript
-const { outputPath, changed } = await tools["pdf-edit-page"].execute({
-  pdfPath: "./report.pdf",
-  pageNumber: 1,
-  instruction: "修正错别字，统一术语",
-});
-```
-
-### 3. 编辑整个文档
-
-```typescript
-const result = await tools["pdf-edit-document"].execute({
-  pdfPath: "./report.pdf",
-  instruction: "将所有「帐号」替换为「账号」，修正语法错误",
-});
-```
-
-### 4. 重新排版
-
-```typescript
-await tools["pdf-edit-relayout"].execute({
-  pdfPath: "./report.pdf",
-  templateId: "academic",  // "academic" | "mobile" | "briefing"
-});
-```
-
-三种版式模板：
-
-| 模板 | 说明 |
-|---|---|
-| `academic` | 学术论文 —— A4 双栏，Times 衬线体，9.5pt 正文 |
-| `mobile` | 手机阅读 —— 320×568 单栏，Helvetica，13pt 正文 |
-| `briefing` | 商务简报 —— A4 单栏，Helvetica，10pt 正文 |
+- 初始发布
+- 样式锁定编辑：AI 修改文字，自动保持原排版
+- native 渲染模式：pdf-lib 直绘，零浏览器依赖
+- CJK 字体自动探测与嵌入
+- 溢出处理：shrink / clip / wrap / reject
+- 术语表全局替换
+- 三种重排版模板：academic / mobile / briefing
 
 ## 工作原理
 
