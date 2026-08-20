@@ -1,240 +1,95 @@
 # @whatsmore-nf/dsh-plugin-pdf-edit
 
-Style-locked PDF editor plugin for [DeepSeek Harness](https://github.com/Whatsmore-nf) — AI edits text, native renderer preserves layout.
+DeepSeek Harness 插件 —— AI 修改 PDF 文字，自动保持原版式不变。
 
-## Features
+## 这是什么
 
-- **Style-locked editing** — AI modifies text content while preserving original fonts, sizes, colors, and positions
-- **Native renderer** — uses `pdf-lib` direct draw, zero browser dependency, zero native compilation
-- **CJK support** — auto-detects and embeds CJK fonts (SimHei / MS Gothic / Noto Sans CJK) for Chinese, Japanese, Korean
-- **Overflow handling** — shrink, clip, wrap, or reject when replacement text exceeds original box
-- **Glossary** — global term substitution (e.g. `帐号 → 账号`) applied before AI call
-- **Batch editing** — edit entire document page-by-page with progress tracking
-- **Relayout** — reflow extracted text into academic (2-col A4), mobile (single-col), or briefing templates
-- **Browser mode** (optional) — `puppeteer-core` + system Chrome for complex CSS rendering when needed
+一个面向 PDF 文档的 AI 编辑插件。你用自然语言告诉它要改什么，它就会：
 
-## Install
+- **只改文字，不动排版** —— 字体、字号、颜色、位置全部锁定，改完和原文看起来一模一样
+- **自动处理溢出** —— 新文字比原来长时，自动缩小字号或截断，不会撑破版面
+- **支持中文** —— 自动识别并嵌入系统中文字体（SimHei / 微软雅黑 / Noto Sans CJK）
+
+## 适合什么场景
+
+| 场景 | 举例 |
+|---|---|
+| **术语统一** | 全文把「帐号」改成「账号」、「数据中台」改成「数据平台」 |
+| **错别字修正** | 让 AI 扫一遍，自动修正拼写和语法错误 |
+| **合同/报告批量修改** | 多页文档统一替换人名、金额、日期等 |
+| **格式转换** | 把散乱的 PDF 重新排版成学术论文双栏、手机阅读单栏、商务简报等版式 |
+
+## 安装
 
 ```bash
-# Harness plugin CLI
+# 通过 Harness 插件 CLI（与官方插件一致）
 dsh plugin --profile web add @whatsmore-nf/dsh-plugin-pdf-edit@latest
 
-# npm
+# 或直接通过 npm
 npm install @whatsmore-nf/dsh-plugin-pdf-edit
 ```
 
-## Quick Start
+## 使用
+
+### 1. 激活插件
 
 ```typescript
 import { activate, tools } from "@whatsmore-nf/dsh-plugin-pdf-edit";
 
-// Activate with DeepSeek API key
 activate({
-  apiKey: process.env.DEEPSEEK_API_KEY,
-  glossary: { "帐号": "账号", "数据中台": "数据平台" },
-  overflow: { mode: "shrink", minFontSizePt: 6 },
+  apiKey: process.env.DEEPSEEK_API_KEY,  // 或直接写字符串
+  glossary: { "帐号": "账号", "数据中台": "数据平台" },  // 全局术语替换
 });
+```
 
-// Edit a single page
+### 2. 编辑单页
+
+```typescript
 const { outputPath, changed } = await tools["pdf-edit-page"].execute({
   pdfPath: "./report.pdf",
   pageNumber: 1,
   instruction: "修正错别字，统一术语",
 });
-console.log(changed ? `Saved to ${outputPath}` : "No changes");
+```
 
-// Edit entire document
+### 3. 编辑整个文档
+
+```typescript
 const result = await tools["pdf-edit-document"].execute({
   pdfPath: "./report.pdf",
   instruction: "将所有「帐号」替换为「账号」，修正语法错误",
-  onProgress: (info) => console.log(`[${info.stage}] ${info.done}/${info.total}`),
 });
+```
 
-// Relayout to academic 2-column template
+### 4. 重新排版
+
+```typescript
 await tools["pdf-edit-relayout"].execute({
   pdfPath: "./report.pdf",
-  templateId: "academic",
+  templateId: "academic",  // "academic" | "mobile" | "briefing"
 });
 ```
 
-## Configuration
+三种版式模板：
 
-```typescript
-interface DshPdfEditConfig {
-  /** DeepSeek API key (or set DEEPSEEK_API_KEY env) */
-  apiKey?: string;
-  /** Custom API base URL */
-  baseUrl?: string;
-  /** Model name (default: deepseek-chat) */
-  model?: string;
-
-  /** Overflow policy when replacement text is wider than original */
-  overflow?: OverflowPolicy;
-  /** Global term substitution */
-  glossary?: Glossary;
-  /** Custom font configuration */
-  fonts?: FontConfig;
-  /** Background patch color (default: #ffffff) */
-  patchColor?: string;
-
-  /** Strict TID matching — reject patches for unknown tids */
-  strictTids?: boolean;
-  /** Use original text when AI returns unknown tid */
-  missingTidsUseOriginal?: boolean;
-  /** Recover color from surrounding context */
-  recoverColor?: boolean;
-  /** Strict color matching */
-  strictColor?: boolean;
-
-  /** Render mode: "native" (pdf-lib direct) or "browser" (puppeteer-core) */
-  renderMode?: "native" | "browser";
-  /** Path to Chrome/Chromium executable (browser mode only) */
-  browserExecutablePath?: string;
-  /** Max concurrent browser pages (browser mode only) */
-  browserConcurrency?: number;
-}
-```
-
-### OverflowPolicy
-
-```typescript
-interface OverflowPolicy {
-  mode: "clip" | "shrink" | "reject" | "wrap";
-  minFontSizePt?: number; // for shrink mode, default 6
-}
-```
-
-| Mode | Behavior |
+| 模板 | 说明 |
 |---|---|
-| `shrink` | Reduce font size to fit, down to `minFontSizePt` |
-| `clip` | Truncate text with ellipsis (…) |
-| `wrap` | Wrap to next line if space allows |
-| `reject` | Throw error on overflow |
+| `academic` | 学术论文 —— A4 双栏，Times 衬线体，9.5pt 正文 |
+| `mobile` | 手机阅读 —— 320×568 单栏，Helvetica，13pt 正文 |
+| `briefing` | 商务简报 —— A4 单栏，Helvetica，10pt 正文 |
 
-### FontConfig
-
-```typescript
-interface FontConfig {
-  customs?: Array<{
-    family: string;
-    path?: string;   // local .ttf/.otf path
-    url?: string;    // remote font URL
-    bytes?: Uint8Array;
-  }>;
-  cjk?: {
-    path?: string;
-    url?: string;
-    bytes?: Uint8Array;
-  };
-  cjkAutoDetect?: boolean; // auto-find system CJK font, default true
-  fakeBold?: boolean;      // simulate bold for fonts without bold variant
-}
-```
-
-### Glossary
-
-```typescript
-// Object form
-type Glossary = Record<string, string>;
-
-// Array form (preserves order)
-type Glossary = Array<{ from: string; to: string }>;
-```
-
-## Tools
-
-### `pdf-edit-page`
-
-Edit a single page with natural language instruction.
-
-| Parameter | Type | Required | Description |
-|---|---|---|---|
-| `pdfPath` | `string` | ✅ | Input PDF file path |
-| `pageNumber` | `number` | ✅ | 1-based page number |
-| `instruction` | `string` | ✅ | Natural language edit instruction |
-| `targetTids` | `string[]` | | Restrict editing to specific text units |
-| `outputPath` | `string` | | Output file path (default: `*.edited.pdf`) |
-
-### `pdf-edit-document`
-
-Edit all pages in a document.
-
-| Parameter | Type | Required | Description |
-|---|---|---|---|
-| `pdfPath` | `string` | ✅ | Input PDF file path |
-| `instruction` | `string` | ✅ | Natural language edit instruction |
-| `outputPath` | `string` | | Output file path |
-| `onProgress` | `ProgressFn` | | Progress callback |
-
-### `pdf-edit-relayout`
-
-Reflow document text into a template layout.
-
-| Parameter | Type | Required | Description |
-|---|---|---|---|
-| `pdfPath` | `string` | ✅ | Input PDF file path |
-| `templateId` | `"academic" \| "mobile" \| "briefing"` | ✅ | Layout template |
-| `outputPath` | `string` | | Output file path |
-| `onProgress` | `ProgressFn` | | Progress callback |
-
-## Relayout Templates
-
-| Template | Description |
-|---|---|
-| `academic` | A4, 2-column, Times serif, 9.5pt body — for papers & journals |
-| `mobile` | 320×568, single-column, Helvetica, 13pt body — for phone reading |
-| `briefing` | A4, single-column, Helvetica, 10pt body — for business reports |
-
-## Architecture
+## 工作原理
 
 ```
-┌─────────────┐     ┌──────────────┐     ┌─────────────────┐
-│  extractor   │────▶│  validator   │────▶│ native-renderer │
-│ (pdfjs-dist) │     │ (measure +   │     │ (pdf-lib draw)  │
-│              │     │  overflow)   │     │                 │
-└─────────────┘     └──────────────┘     └─────────────────┘
-       │                    │                      │
-       ▼                    ▼                      ▼
-  PageExtract          applyPatches          renderPatches
-  (units + style)     (text → patches)      (patches → PDF)
+原 PDF ──▶ 提取文字+样式 ──▶ AI 生成修改 ──▶ 叠加绘制回 PDF
 ```
 
-**Native mode (default):**
-- `pdfjs-dist` extracts text positions & styles
-- `@pdf-lib/fontkit` measures real glyph widths
-- `pdf-lib` overlays white rectangles + redraws text at exact positions
-- Zero browser, zero native compilation, ~25 kB package
+1. **提取**：用 pdfjs 读取每一页的文字内容，记录每个词的位置、字体、字号、颜色
+2. **AI 修改**：把提取的文字发给 DeepSeek，AI 只返回需要改的文字片段
+3. **叠加绘制**：用 pdf-lib 在原位置盖一个白色矩形遮住旧文字，再在同一位置用相同字体画上新文字
 
-**Browser mode (optional):**
-- Uses `puppeteer-core` + system Chrome
-- Set `renderMode: "browser"` and `browserExecutablePath`
-- For cases requiring CSS features not expressible in pdf-lib
+整个过程不需要打开浏览器，不需要安装 Chromium，纯 JavaScript 完成。
 
-## Dependencies
-
-| Package | Purpose | Size |
-|---|---|---|
-| `pdf-lib` | PDF load / modify / draw / save | ~200 kB |
-| `@pdf-lib/fontkit` | Font parsing & glyph measurement | ~150 kB |
-| `pdfjs-dist` | Text extraction (lazy loaded) | ~500 kB |
-| `puppeteer-core` | Browser rendering (optional) | — |
-
-## Development
-
-```bash
-# Install
-npm install
-
-# Build
-npm run build
-
-# Type check
-npm run lint
-
-# Watch mode
-npm run dev
-```
-
-## License
+## 许可证
 
 [MIT](./LICENSE)
