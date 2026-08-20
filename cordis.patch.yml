@@ -1,6 +1,6 @@
 - insert:
     - id: pdf-edit
-      name: dsh-plugin-pdf-edit
+      name: '@whatsmore-nf/dsh-plugin-pdf-edit'
       config:
         overflow: shrink
         minFontSizePt: 6
