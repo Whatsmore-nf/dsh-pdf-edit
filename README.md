@@ -1,5 +1,7 @@
 # @whatsmore-nf/dsh-plugin-pdf-edit
 
+> [English](./README.en.md) | 中文
+
 DeepSeek Harness 插件 —— AI 修改 PDF 文字，自动保持原版式不变。
 
 ## 这是什么
