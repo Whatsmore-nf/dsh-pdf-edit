@@ -33,6 +33,15 @@ npm install dsh-pdf-edit
 
 ## Changelog
 
+### v0.1.6
+
+- Adapt to the dsh v0.1.1-rc.2 plugin contract: export `name` / `inject` / `apply(ctx, config)`, register all four tools via `ctx.tools.register(defineTool(...))`, configuration passed through the cordis patch row's `config:` field
+- Add path whitelist guard: `pdfPath`/`outputPath` validated against allowedRoots with symlink resolution and extension/size checks, preventing injection-driven arbitrary file read/write
+- Prompt injection defense: PDF text wrapped in a data container, hardened system prompt, second-stage injection scan on AI output with fallback to original text
+- Browser rendering hardening: JavaScript disabled, outbound requests intercepted, CSP and CSS sanitizer, background dataUrl and font name whitelists
+- Engineering robustness: API key env-first, request timeout, chunked concurrency limit, 429-aware backoff, AI output length caps
+- New test suite (120 cases) and editing benchmark (10 cases, `npm run bench`)
+
 ### v0.1.5
 
 - Rename package from `@whatsmore-nf/dsh-plugin-pdf-edit` to `dsh-pdf-edit`, display plugin name directly in the marketplace

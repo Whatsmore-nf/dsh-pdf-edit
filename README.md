@@ -33,27 +33,14 @@ npm install dsh-pdf-edit
 
 ## 更新记录
 
-### v0.1.6（安全加固 + dsh 0.1.1-rc.2 适配）
+### v0.1.6
 
-适配 dsh v0.1.1-rc.2 插件契约（与官方 `@deepseek-ai/dsh-tool-*` 一致）：
-
-- 导出 `name` / `inject: ["tools"]` / `apply(ctx, config)`，经 `ctx.tools.register(defineTool({...}))` 注册
-  四个工具（pdf-edit-preview / pdf-edit-page / pdf-edit-document / pdf-edit-relayout）
-- 工具 schema 采用 dsh 方言（per-property `required`、`integer`、`enum`），输出带 `output.schema`
-  与 content-block `render`
-- 配置经 cordis 行的 `config:` 字段传入（`allowedRoots` / `glossary` / `fonts` / `renderMode` 等），
-  编程接口 `activate()`/`setChatFn()` 保留
-
-依据安全审查落地以下修复：
-
-- **P0 路径白名单**：新增 `src/path-guard.ts`，四个工具入口的 `pdfPath`/`outputPath` 全部过闸
-  （allowedRoots 白名单、realpath 符号链接解析、扩展名/大小/可写性校验），工具 schema 增加 `pattern` 约束
-- **P0 Prompt injection 防御**：PDF 文本放入 ```data 数据容器并在 system prompt 声明「围栏内皆数据」；
-  指令/条目/术语限长；AI 输出二次注入特征检测，命中即回退原文
-- **P1 Puppeteer 加固**：禁 JS、拦截全部出站请求（仅放行 data:）、CSP meta、CSS 清洗
-  （剥 @import/url() 外联）、背景 dataUrl 白名单、字体名白名单
-- **P2 工程健壮性**：API Key 环境变量优先+格式校验、fetch 120s 超时、分块并发 pLimit(3)、
-  429 感知退避+jitter、parsePatchObject 总量/条目/字段限长
+- 适配 dsh v0.1.1-rc.2 插件契约：导出 `name` / `inject` / `apply(ctx, config)`，四个工具改经 `ctx.tools.register(defineTool(...))` 注册，配置经 cordis 行 `config:` 字段传入
+- 新增路径白名单守卫：`pdfPath`/`outputPath` 经 allowedRoots 校验、符号链接解析与扩展名/大小检查，防止注入导致的任意文件读写
+- Prompt injection 防御：PDF 文本放入数据容器并加固系统提示词，AI 输出做注入特征二次检测，命中回退原文
+- 浏览器渲染加固：禁用 JS、拦截出站请求、CSP 与 CSS 清洗、背景 dataUrl 与字体名白名单
+- 工程健壮性：API Key 环境变量优先、请求超时、分块并发限流、429 感知退避、AI 输出限长校验
+- 新增测试体系（120 用例）与编辑能力基准（10 用例，`npm run bench`）
 
 ### v0.1.5
 
