@@ -33,6 +33,14 @@ npm install @whatsmore-nf/dsh-plugin-pdf-edit
 
 ## Changelog
 
+### v0.1.4
+
+- Fix `embedCustom` passing fontkit object to `doc.embedFont`, now passes `Uint8Array` directly
+- Fix `loadBytes` not supporting string paths (e.g. `fonts.cjk: '/path/to/font.ttf'`)
+- Fix CFF-format TTC font compatibility, auto-detect and skip unsupported CFF fonts
+- Add Android system font paths (MiSansRoundedSC, NotoSansSC, etc.)
+- Simplify `cordis.patch.yml` to community plugin standard format
+
 ### v0.1.3
 
 - Fix missing `output: { schema, render }` field in `ctx.tools.register()` causing registration failure

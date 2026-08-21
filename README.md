@@ -33,6 +33,14 @@ npm install @whatsmore-nf/dsh-plugin-pdf-edit
 
 ## 更新记录
 
+### v0.1.4
+
+- 修复 `embedCustom` 传 fontkit 对象给 `doc.embedFont` 的错误，改为直接传 `Uint8Array`
+- 修复 `loadBytes` 不支持字符串路径（如 `fonts.cjk: '/path/to/font.ttf'`）
+- 修复 CFF 格式 TTC 字体兼容性，自动检测并跳过不支持的 CFF 字体
+- 添加 Android 系统字体路径（MiSansRoundedSC、NotoSansSC 等）
+- 简化 `cordis.patch.yml` 为社区插件标准格式
+
 ### v0.1.3
 
 - 修复 `ctx.tools.register()` 缺少必需的 `output: { schema, render }` 字段导致注册失败
