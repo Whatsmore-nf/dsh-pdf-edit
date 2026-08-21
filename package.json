@@ -1,6 +1,6 @@
 {
   "name": "@whatsmore-nf/dsh-plugin-pdf-edit",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "description": "Style-locked PDF editor plugin for DeepSeek Harness — AI edits text, native renderer preserves layout",
   "type": "module",
   "main": "dist/index.js",
