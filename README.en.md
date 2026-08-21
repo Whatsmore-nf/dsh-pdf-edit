@@ -1,4 +1,4 @@
-# @whatsmore-nf/dsh-plugin-pdf-edit
+# dsh-pdf-edit
 
 > English | [中文](./README.md)
 
@@ -25,13 +25,17 @@ An AI-powered PDF editing plugin. Tell it what to change in natural language, an
 
 ```bash
 # Via Harness plugin CLI (same as official plugins)
-dsh plugin --profile web add @whatsmore-nf/dsh-plugin-pdf-edit@latest
+dsh plugin --profile web add dsh-pdf-edit@latest
 
 # Or via npm
-npm install @whatsmore-nf/dsh-plugin-pdf-edit
+npm install dsh-pdf-edit
 ```
 
 ## Changelog
+
+### v0.1.5
+
+- Rename package from `@whatsmore-nf/dsh-plugin-pdf-edit` to `dsh-pdf-edit`, display plugin name directly in the marketplace
 
 ### v0.1.4
 

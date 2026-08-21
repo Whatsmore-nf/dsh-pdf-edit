@@ -1,4 +1,4 @@
-# @whatsmore-nf/dsh-plugin-pdf-edit
+# dsh-pdf-edit
 
 > [English](./README.en.md) | 中文
 
@@ -25,13 +25,17 @@ DeepSeek Harness 插件 —— AI 修改 PDF 文字，自动保持原版式不�
 
 ```bash
 # 通过 Harness 插件 CLI（与官方插件一致）
-dsh plugin --profile web add @whatsmore-nf/dsh-plugin-pdf-edit@latest
+dsh plugin --profile web add dsh-pdf-edit@latest
 
 # 或直接通过 npm
-npm install @whatsmore-nf/dsh-plugin-pdf-edit
+npm install dsh-pdf-edit
 ```
 
 ## 更新记录
+
+### v0.1.5
+
+- 包名从 `@whatsmore-nf/dsh-plugin-pdf-edit` 改为 `dsh-pdf-edit`，在插件市场直接显示为插件名
 
 ### v0.1.4
 
