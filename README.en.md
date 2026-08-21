@@ -33,6 +33,15 @@ npm install @whatsmore-nf/dsh-plugin-pdf-edit
 
 ## Changelog
 
+### v0.1.3
+
+- Fix missing `output: { schema, render }` field in `ctx.tools.register()` causing registration failure
+- Fix `execute` signature mismatch (should be `(args, exec)` two-parameter)
+
+### v0.1.2
+
+- Add cordis plugin format `name`/`inject`/`apply` exports, fix "invalid plugin" error
+
 ### v0.1.1
 
 - Fix plugin name mismatch in `cordis.patch.yml` that caused load failure

@@ -33,6 +33,15 @@ npm install @whatsmore-nf/dsh-plugin-pdf-edit
 
 ## 更新记录
 
+### v0.1.3
+
+- 修复 `ctx.tools.register()` 缺少必需的 `output: { schema, render }` 字段导致注册失败
+- 修复 `execute` 签名不匹配（应为 `(args, exec)` 双参数）
+
+### v0.1.2
+
+- 添加 cordis 插件格式的 `name`/`inject`/`apply` 导出，修复 "invalid plugin" 错误
+
 ### v0.1.1
 
 - 修复 `cordis.patch.yml` 中插件名与 `package.json` 不一致导致加载失败的问题
