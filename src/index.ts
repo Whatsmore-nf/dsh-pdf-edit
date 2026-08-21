@@ -1,13 +1,26 @@
+/**
+ * dsh-pdf-edit — DeepSeek Harness 插件（适配 dsh 0.1.1-rc.2 插件契约）。
+ *
+ * 导出契约（与官方 @deepseek-ai/dsh-tool-* 一致）：
+ *   name   — cordis 插件名
+ *   inject — 依赖的服务（"tools"）
+ *   apply(ctx, config) — 通过 ctx.tools.register(defineTool({...})) 注册工具
+ *
+ * 兼容导出：activate/deactivate/setChatFn 等编程接口保留，便于测试与嵌入调用。
+ */
 import { readFileSync, writeFileSync } from "node:fs";
 
 import { StyleLockedEditor } from "./pipeline.js";
 import { createDeepSeekChatFn, adapterToChatFn } from "./ai-editor.js";
+import {
+  validateInputPath,
+  validateOutputPath,
+  type PathGuardOptions,
+} from "./path-guard.js";
 import type { FontConfig } from "./fonts-resolver.js";
 
 import type {
   ChatFn,
-  ChatMessage,
-  ChatOptions,
   Glossary,
   LLMAdapter,
   OverflowPolicy,
@@ -24,6 +37,7 @@ export * from "./extractor.js";
 export * from "./ai-editor.js";
 export * from "./validator.js";
 export * from "./native-renderer.js";
+export * from "./path-guard.js";
 export * from "./pdf-ops.js";
 export {
   TEMPLATES,
@@ -35,10 +49,16 @@ export * from "./layout-flow.js";
 export * from "./flow.js";
 export * from "./pipeline.js";
 
+/* ------------------------------------------------------------------ */
+/* 配置                                                                */
+/* ------------------------------------------------------------------ */
+
 export interface DshPdfEditConfig {
   apiKey?: string;
   baseUrl?: string;
   model?: string;
+  /** 允许读写的根目录（绝对路径）。默认 [process.cwd()]；空数组 = 完全禁用文件操作 */
+  allowedRoots?: string[];
   overflow?: OverflowPolicy;
   glossary?: Glossary;
   fonts?: FontConfig;
@@ -64,15 +84,28 @@ const DEFAULT_CONFIG: DshPdfEditConfig = {
 
 let _config: DshPdfEditConfig = { ...DEFAULT_CONFIG };
 let _chatFn: ChatFn | null = null;
-let _active = false;
+
+/** 工具入参路径守卫选项：allowedRoots 未配置时锁在 cwd。 */
+function guardOpts(): PathGuardOptions {
+  return { allowedRoots: _config.allowedRoots ?? [process.cwd()] };
+}
 
 function getChatFn(): ChatFn {
   if (_chatFn) return _chatFn;
 
-  const apiKey = _config.apiKey ?? process.env.DEEPSEEK_API_KEY;
+  // 环境变量优先；config 直传仅作兼容并告警（避免 key 进入配置文件/日志）
+  const apiKey = process.env.DEEPSEEK_API_KEY ?? _config.apiKey;
   if (!apiKey) {
     throw new Error(
-      "dsh-pdf-edit: apiKey 未配置，请设置 DEEPSEEK_API_KEY 环境变量或在 activate 时传入",
+      "dsh-pdf-edit: 请设置 DEEPSEEK_API_KEY 环境变量（或在配置中传入 apiKey）",
+    );
+  }
+  if (!/^sk-[A-Za-z0-9\-_]{8,}$/.test(apiKey)) {
+    throw new Error("dsh-pdf-edit: API Key 格式异常，应以 sk- 开头且包含足够长度");
+  }
+  if (process.env.DEEPSEEK_API_KEY === undefined) {
+    console.warn(
+      "[dsh-pdf-edit] 建议改用 DEEPSEEK_API_KEY 环境变量，避免 Key 随配置对象泄漏",
     );
   }
 
@@ -81,21 +114,11 @@ function getChatFn(): ChatFn {
     baseUrl: _config.baseUrl,
     model: _config.model,
   });
-
   return _chatFn;
 }
 
-async function pdfEditEditPage(params: {
-  pdfPath: string;
-  pageNumber: number;
-  instruction: string;
-  targetTids?: string[];
-  outputPath?: string;
-}): Promise<{ outputPath: string; changed: boolean }> {
-  const chat = getChatFn();
-  const original = new Uint8Array(readFileSync(params.pdfPath));
-
-  const editor = await StyleLockedEditor.open(original, chat, {
+function editorOptions() {
+  return {
     overflow: _config.overflow,
     glossary: _config.glossary,
     fonts: _config.fonts,
@@ -107,7 +130,26 @@ async function pdfEditEditPage(params: {
     renderMode: _config.renderMode,
     browserExecutablePath: _config.browserExecutablePath,
     browserConcurrency: _config.browserConcurrency,
-  });
+  };
+}
+
+/* ------------------------------------------------------------------ */
+/* 工具执行体（供 defineTool 与编程调用共用）                            */
+/* ------------------------------------------------------------------ */
+
+async function pdfEditPage(params: {
+  pdfPath: string;
+  pageNumber: number;
+  instruction: string;
+  targetTids?: string[];
+  outputPath?: string;
+}): Promise<{ outputPath: string; changed: boolean }> {
+  const inputAbs = validateInputPath(params.pdfPath, guardOpts());
+  const outputAbs = validateOutputPath(params.outputPath, inputAbs, guardOpts());
+  const chat = getChatFn();
+  const original = new Uint8Array(readFileSync(inputAbs));
+
+  const editor = await StyleLockedEditor.open(original, chat, editorOptions());
 
   try {
     const result = await editor.editPage(
@@ -120,13 +162,9 @@ async function pdfEditEditPage(params: {
       result.length !== original.length ||
       !result.every((b, i) => b === original[i]);
 
-    const outputPath =
-      params.outputPath ??
-      params.pdfPath.replace(/\.pdf$/i, ".edited.pdf");
+    writeFileSync(outputAbs, result);
 
-    writeFileSync(outputPath, result);
-
-    return { outputPath, changed };
+    return { outputPath: outputAbs, changed };
   } finally {
     await editor.close();
   }
@@ -136,44 +174,29 @@ async function pdfEditDocument(params: {
   pdfPath: string;
   instruction: string;
   outputPath?: string;
-  onProgress?: ProgressFn;
 }): Promise<{
   outputPath: string;
-  failures: Array<{ page: number; error: unknown }>;
+  failures: Array<{ page: number; error: string }>;
   warnings: string[];
 }> {
+  const inputAbs = validateInputPath(params.pdfPath, guardOpts());
+  const outputAbs = validateOutputPath(params.outputPath, inputAbs, guardOpts());
   const chat = getChatFn();
-  const original = new Uint8Array(readFileSync(params.pdfPath));
+  const original = new Uint8Array(readFileSync(inputAbs));
 
-  const editor = await StyleLockedEditor.open(original, chat, {
-    overflow: _config.overflow,
-    glossary: _config.glossary,
-    fonts: _config.fonts,
-    patchColor: _config.patchColor,
-    strictTids: _config.strictTids,
-    missingTidsUseOriginal: _config.missingTidsUseOriginal,
-    recoverColor: _config.recoverColor,
-    strictColor: _config.strictColor,
-    renderMode: _config.renderMode,
-    browserExecutablePath: _config.browserExecutablePath,
-    browserConcurrency: _config.browserConcurrency,
-  });
+  const editor = await StyleLockedEditor.open(original, chat, editorOptions());
 
   try {
-    const result = await editor.editDocument(
-      params.instruction,
-      params.onProgress,
-    );
-
-    const outputPath =
-      params.outputPath ??
-      params.pdfPath.replace(/\.pdf$/i, ".edited.pdf");
-
-    writeFileSync(outputPath, result);
+    const result = await editor.editDocument(params.instruction);
+    writeFileSync(outputAbs, result);
 
     return {
-      outputPath,
-      failures: editor.lastFailures,
+      outputPath: outputAbs,
+      // error 必须是无损 JSON：序列化为字符串
+      failures: editor.lastFailures.map((f) => ({
+        page: f.page,
+        error: String(f.error),
+      })),
       warnings: editor.warnings,
     };
   } finally {
@@ -185,35 +208,23 @@ async function pdfEditRelayout(params: {
   pdfPath: string;
   templateId: "academic" | "mobile" | "briefing";
   outputPath?: string;
-  onProgress?: ProgressFn;
 }): Promise<{ outputPath: string }> {
+  const inputAbs = validateInputPath(params.pdfPath, guardOpts());
+  const outputAbs = validateOutputPath(
+    params.outputPath,
+    inputAbs,
+    guardOpts(),
+    ".relayout.pdf",
+  );
   const chat = getChatFn();
-  const original = new Uint8Array(readFileSync(params.pdfPath));
+  const original = new Uint8Array(readFileSync(inputAbs));
 
-  const editor = await StyleLockedEditor.open(original, chat, {
-    overflow: _config.overflow,
-    glossary: _config.glossary,
-    fonts: _config.fonts,
-    patchColor: _config.patchColor,
-    strictTids: _config.strictTids,
-    missingTidsUseOriginal: _config.missingTidsUseOriginal,
-    recoverColor: _config.recoverColor,
-    strictColor: _config.strictColor,
-    renderMode: _config.renderMode,
-    browserExecutablePath: _config.browserExecutablePath,
-    browserConcurrency: _config.browserConcurrency,
-  });
+  const editor = await StyleLockedEditor.open(original, chat, editorOptions());
 
   try {
-    const result = await editor.relayout(params.templateId, params.onProgress);
-
-    const outputPath =
-      params.outputPath ??
-      params.pdfPath.replace(/\.pdf$/i, ".relayout.pdf");
-
-    writeFileSync(outputPath, result);
-
-    return { outputPath };
+    const result = await editor.relayout(params.templateId);
+    writeFileSync(outputAbs, result);
+    return { outputPath: outputAbs };
   } finally {
     await editor.close();
   }
@@ -226,13 +237,11 @@ async function pdfEditPreview(params: {
   units: Array<{ tid: string; text: string }>;
   pageCount: number;
 }> {
+  const inputAbs = validateInputPath(params.pdfPath, guardOpts());
   const chat = getChatFn();
-  const original = new Uint8Array(readFileSync(params.pdfPath));
+  const original = new Uint8Array(readFileSync(inputAbs));
 
   const editor = await StyleLockedEditor.open(original, chat, {
-    overflow: _config.overflow,
-    glossary: _config.glossary,
-    fonts: _config.fonts,
     recoverColor: _config.recoverColor,
     strictColor: _config.strictColor,
     renderMode: _config.renderMode,
@@ -248,124 +257,231 @@ async function pdfEditPreview(params: {
   }
 }
 
-export const tools = {
-  "pdf-edit-page": {
-    description:
-      "对 PDF 单页进行 AI 文本精修（修正错别字、术语统一、措辞调整），样式锁定不变",
-    parameters: {
-      type: "object",
-      properties: {
+/* ------------------------------------------------------------------ */
+/* dsh 插件契约                                                        */
+/* ------------------------------------------------------------------ */
+
+export const name = "dsh-pdf-edit";
+
+/** 依赖的 dsh 服务：工具注册表 */
+export const inject = ["tools"] as const;
+
+/**
+ * 插件装载入口。config 来自 cordis.patch.yml 中本插件行的 `config:` 字段，
+ * 键名与 DshPdfEditConfig 一致（如 allowedRoots / glossary / fonts / renderMode）。
+ */
+export async function apply(
+  ctx: { tools: { register(definition: unknown): unknown } },
+  config?: Partial<DshPdfEditConfig>,
+): Promise<void> {
+  if (config) {
+    // 仅当影响 chat 构造的键变化时才重建 chatFn，避免误清外部注入的 mock
+    const chatAffecting = ["apiKey", "baseUrl", "model"] as const;
+    if (chatAffecting.some((k) => k in config)) _chatFn = null;
+    _config = { ..._config, ...config };
+  }
+
+  // 延迟加载：本地开发环境未安装 dsh-tools 时模块本身仍可导入（供测试）
+  const { defineTool } = await import("@deepseek-ai/dsh-tools");
+
+  const jsonRender = (_args: unknown, value: unknown) => [
+    { type: "text" as const, text: JSON.stringify(value) },
+  ];
+
+  /* ------------------------- pdf-edit-preview ------------------------- */
+  ctx.tools.register(
+    defineTool({
+      name: "pdf-edit-preview",
+      description:
+        "预览 PDF 某页的可编辑文本单元（tid + text），不做修改。编辑前先预览以获取 targetTids。",
+      parameters: {
         pdfPath: {
           type: "string",
-          description: "PDF 文件路径",
+          required: true,
+          description:
+            "PDF 文件路径（必须位于 allowedRoots 白名单内，默认当前工作目录）",
         },
         pageNumber: {
-          type: "number",
+          type: "integer",
+          required: true,
+          description: "要预览的页码（1-based）",
+        },
+      },
+      output: {
+        schema: {
+          type: "object",
+          additionalProperties: false,
+          properties: {
+            units: {
+              type: "array",
+              required: true,
+              items: {
+                type: "object",
+                additionalProperties: false,
+                properties: {
+                  tid: { type: "string", required: true },
+                  text: { type: "string", required: true },
+                },
+              },
+            },
+            pageCount: { type: "integer", required: true },
+          },
+        },
+        render: jsonRender,
+      },
+      execute: (args) => pdfEditPreview(args),
+    }),
+  );
+
+  /* -------------------------- pdf-edit-page -------------------------- */
+  ctx.tools.register(
+    defineTool({
+      name: "pdf-edit-page",
+      description:
+        "对 PDF 单页进行 AI 文本精修（修正错别字、术语统一、措辞调整），样式锁定不变。",
+      parameters: {
+        pdfPath: {
+          type: "string",
+          required: true,
+          description: "PDF 文件路径（必须位于 allowedRoots 白名单内）",
+        },
+        pageNumber: {
+          type: "integer",
+          required: true,
           description: "要编辑的页码（1-based）",
         },
         instruction: {
           type: "string",
+          required: true,
           description: "修改指令，如：修正错别字；把「帐号」统一为「账号」",
         },
         targetTids: {
           type: "array",
+          description: "可选，只编辑这些 tid 对应的文本单元（先用 pdf-edit-preview 获取）",
           items: { type: "string" },
-          description: "可选，只编辑这些 tid 对应的文本单元",
         },
         outputPath: {
           type: "string",
           description: "输出文件路径，默认在原文件名后加 .edited",
         },
       },
-      required: ["pdfPath", "pageNumber", "instruction"],
-    },
-    execute: pdfEditEditPage,
-  },
+      output: {
+        schema: {
+          type: "object",
+          additionalProperties: false,
+          properties: {
+            outputPath: { type: "string", required: true },
+            changed: { type: "boolean", required: true },
+          },
+        },
+        render: jsonRender,
+      },
+      execute: (args) => pdfEditPage(args),
+    }),
+  );
 
-  "pdf-edit-document": {
-    description:
-      "对 PDF 全文进行 AI 批量精修（校对、术语统一、措辞调整），逐页样式锁定",
-    parameters: {
-      type: "object",
-      properties: {
+  /* ------------------------ pdf-edit-document ------------------------ */
+  ctx.tools.register(
+    defineTool({
+      name: "pdf-edit-document",
+      description:
+        "对 PDF 全文进行 AI 批量精修（校对、术语统一、措辞调整），逐页样式锁定。",
+      parameters: {
         pdfPath: {
           type: "string",
-          description: "PDF 文件路径",
+          required: true,
+          description: "PDF 文件路径（必须位于 allowedRoots 白名单内）",
         },
         instruction: {
           type: "string",
+          required: true,
           description: "全文修改指令",
         },
         outputPath: {
           type: "string",
-          description: "输出文件路径",
+          description: "输出文件路径，默认在原文件名后加 .edited",
         },
       },
-      required: ["pdfPath", "instruction"],
-    },
-    execute: pdfEditDocument,
-  },
+      output: {
+        schema: {
+          type: "object",
+          additionalProperties: false,
+          properties: {
+            outputPath: { type: "string", required: true },
+            failures: {
+              type: "array",
+              items: {
+                type: "object",
+                additionalProperties: false,
+                properties: {
+                  page: { type: "integer", required: true },
+                  error: { type: "string", required: true },
+                },
+              },
+            },
+            warnings: { type: "array", items: { type: "string" } },
+          },
+        },
+        render: jsonRender,
+      },
+      execute: (args) => pdfEditDocument(args),
+    }),
+  );
 
-  "pdf-edit-relayout": {
-    description:
-      "对 PDF 进行版式重排，可选学术双栏、手机单栏、商务简报三种模板",
-    parameters: {
-      type: "object",
-      properties: {
+  /* ------------------------ pdf-edit-relayout ------------------------ */
+  ctx.tools.register(
+    defineTool({
+      name: "pdf-edit-relayout",
+      description:
+        "对 PDF 进行版式重排，可选学术双栏（academic）、手机单栏（mobile）、商务简报（briefing）三种模板。",
+      parameters: {
         pdfPath: {
           type: "string",
-          description: "PDF 文件路径",
+          required: true,
+          description: "PDF 文件路径（必须位于 allowedRoots 白名单内）",
         },
         templateId: {
           type: "string",
+          required: true,
           enum: ["academic", "mobile", "briefing"],
-          description:
-            "版式模板：academic=学术双栏, mobile=手机单栏, briefing=商务简报",
+          description: "版式模板",
         },
         outputPath: {
           type: "string",
-          description: "输出文件路径",
+          description: "输出文件路径，默认在原文件名后加 .relayout",
         },
       },
-      required: ["pdfPath", "templateId"],
-    },
-    execute: pdfEditRelayout,
-  },
+      output: {
+        schema: {
+          type: "object",
+          additionalProperties: false,
+          properties: {
+            outputPath: { type: "string", required: true },
+          },
+        },
+        render: jsonRender,
+      },
+      execute: (args) => pdfEditRelayout(args),
+    }),
+  );
+}
 
-  "pdf-edit-preview": {
-    description: "预览 PDF 某页的可编辑文本单元（tid + text），不做修改",
-    parameters: {
-      type: "object",
-      properties: {
-        pdfPath: {
-          type: "string",
-          description: "PDF 文件路径",
-        },
-        pageNumber: {
-          type: "number",
-          description: "页码（1-based）",
-        },
-      },
-      required: ["pdfPath", "pageNumber"],
-    },
-    execute: pdfEditPreview,
-  },
-};
+/* ------------------------------------------------------------------ */
+/* 编程接口（保留，供嵌入方与测试使用）                                  */
+/* ------------------------------------------------------------------ */
 
 export function activate(config?: DshPdfEditConfig): void {
-  _config = { ...DEFAULT_CONFIG, ...config };
+  _config = { ...DEFAULT_CONFIG, ..._config, ...config };
   _chatFn = null;
-  _active = true;
 }
 
 export function deactivate(): void {
   _config = { ...DEFAULT_CONFIG };
   _chatFn = null;
-  _active = false;
 }
 
 export function isActive(): boolean {
-  return _active;
+  return _chatFn !== null || process.env.DEEPSEEK_API_KEY !== undefined;
 }
 
 export function setChatFn(chatFn: ChatFn): void {

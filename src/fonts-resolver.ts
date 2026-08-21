@@ -98,6 +98,7 @@ export function toWinAnsiSafe(s: string): string {
 
 export class FontResolver {
   private fontCache = new Map<string, PDFFont>();
+  private faceCache = new Map<string, Uint8Array>();
   private rawCustom = new Map<string, Uint8Array>();
   private rawCjk: Uint8Array | null | undefined;
   private readonly fakeBoldOn: boolean;
@@ -184,13 +185,19 @@ export class FontResolver {
   ): Promise<PDFFont> {
     let font = this.fontCache.get(key);
     if (!font) {
-      font = await this.doc.embedFont(
-        openFontkitFont(bytes) as any,
-        { subset: true },
-      );
+      // pdf-lib 只接受字节；TTC/OTC 集合需先拆包为单 face
+      const faceBytes =
+        this.faceCache.get(key) ?? unwrapFontBytes(bytes, this.faceIndex(key));
+      this.faceCache.set(key, faceBytes);
+      font = await this.doc.embedFont(faceBytes, { subset: true });
       this.fontCache.set(key, font);
     }
     return font;
+  }
+
+  /** Mono/Sharp 等派生 face 不适合正文排版，优先取集合第 0 个 face。 */
+  private faceIndex(_key: string): number {
+    return 0;
   }
 
   private async cjkBytes(): Promise<Uint8Array | null> {
@@ -230,8 +237,75 @@ async function loadBytes(src: {
   return null;
 }
 
-function openFontkitFont(bytes: Uint8Array): any {
-  const f = (fontkit as any).create(bytes);
-  if (f && Array.isArray(f.fonts) && f.fonts.length) return f.fonts[0];
-  return f;
+/**
+ * pdf-lib 的 embedFont 仅接受字节（不接受 fontkit 字体对象），
+ * 且其内置 fontkit 不支持 TTC/OTC 集合（返回 Collection，无 createSubset/layout）。
+ * 因此这里把集合中的指定 face 拆包为独立 sfnt 字节再交给 pdf-lib 嵌入。
+ */
+export function unwrapFontBytes(bytes: Uint8Array, faceIndex = 0): Uint8Array {
+  const isCollection =
+    bytes.length >= 12 &&
+    bytes[0] === 0x74 && // "ttcf"
+    bytes[1] === 0x74 &&
+    bytes[2] === 0x63 &&
+    bytes[3] === 0x66;
+
+  if (!isCollection) return bytes;
+
+  try {
+    return ttcFaceBytes(bytes, faceIndex);
+  } catch {
+    return bytes;
+  }
+}
+
+/** 从 TTC/OTC 集合中提取第 index 个 face，输出独立 sfnt（TTF/OTF）字节。 */
+export function ttcFaceBytes(
+  ttc: Uint8Array,
+  faceIndex = 0,
+): Uint8Array {
+  const dv = new DataView(ttc.buffer, ttc.byteOffset, ttc.byteLength);
+  const numFonts = dv.getUint32(8);
+  if (faceIndex >= numFonts) throw new Error(`TTC 只有 ${numFonts} 个 face`);
+
+  const off = dv.getUint32(12 + faceIndex * 4);
+  const numTables = dv.getUint16(off + 4);
+
+  interface Entry {
+    name: string;
+    offset: number;
+    len: number;
+  }
+  const entries: Entry[] = [];
+  for (let i = 0; i < numTables; i++) {
+    const e = off + 12 + i * 16;
+    entries.push({
+      name: String.fromCharCode(
+        ttc[e],
+        ttc[e + 1],
+        ttc[e + 2],
+        ttc[e + 3],
+      ),
+      offset: dv.getUint32(e + 8),
+      len: dv.getUint32(e + 12),
+    });
+  }
+
+  const dirSize = 12 + numTables * 16;
+  let bodySize = 0;
+  for (const t of entries) bodySize += Math.ceil(t.len / 4) * 4;
+
+  const out = new Uint8Array(dirSize + bodySize);
+  out.set(ttc.subarray(off, off + dirSize), 0);
+  const odv = new DataView(out.buffer);
+
+  let p = dirSize;
+  for (let i = 0; i < numTables; i++) {
+    const t = entries[i];
+    out.set(ttc.subarray(t.offset, t.offset + t.len), p);
+    odv.setUint32(12 + i * 16 + 8, p); // 更新表偏移指向新位置
+    p += Math.ceil(t.len / 4) * 4;
+  }
+
+  return out;
 }

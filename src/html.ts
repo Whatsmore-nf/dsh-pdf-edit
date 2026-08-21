@@ -29,10 +29,17 @@ export function buildPageHtml(
 
   if (ex.background) {
     const b = ex.background;
+    // 背景必须是 data:image/*;base64 且长度受限，防止属性逃逸与外部资源加载
+    if (!/^data:image\/(png|jpeg|jpg|webp);base64,[A-Za-z0-9+/=]+$/.test(b.dataUrl)) {
+      throw new Error(
+        `背景 dataUrl 格式非法（仅允许 data:image/png|jpeg|webp;base64）: ${b.dataUrl.slice(0, 64)}…`,
+      );
+    }
+    if (b.dataUrl.length > 50 * 1024 * 1024) {
+      throw new Error("背景图超过 50MB 上限");
+    }
     parts.push(
-      `<img class="bg" src="${b.dataUrl}" style="width:${b.widthPt.toFixed(
-        2,
-      )}pt;height:${b.heightPt.toFixed(2)}pt">`,
+      `<img class="bg" src="${b.dataUrl}" alt="">`,
     );
   }
 
@@ -105,19 +112,38 @@ function maskRect(u: Unit) {
 export function docShell(
   css: string,
   body: string,
-  opts: { fontCss?: string } = {},
+  opts: { fontCss?: string; csp?: boolean } = {},
 ): string {
+  // CSP 双保险：即使请求拦截失效，浏览器层也禁止脚本/外联
+  const csp = opts.csp
+    ? `<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline' data:; img-src data:; font-src data:;">`
+    : "";
   return `<!doctype html>
 <html>
 <head>
 <meta charset="utf-8">
+${csp}
 <style>
 @page{margin:0}
 html,body{margin:0;padding:0;background:#fff}
-${opts.fontCss ?? ""}
-${css}
+${sanitizeCss(opts.fontCss ?? "")}
+${sanitizeCss(css)}
 </style>
 </head>
 <body>${body}</body>
 </html>`;
+}
+
+/**
+ * CSS 清洗：剥离 @import、非 data: 的 url() 外链、防 </style> 逃逸。
+ * 字体名等来自不可信 PDF，必须视为污染数据。
+ */
+export function sanitizeCss(css: string): string {
+  return css
+    .replace(/@import[^;]+;/gi, "") // 去掉 @import
+    .replace(
+      /url\(\s*['"]?(?!data:)[^)'"]*['"]?\s*\)/gi,
+      "url(data:,)", // 外链 url() 替换为空 data
+    )
+    .replace(/<\/\s*style/gi, ""); // 防 </style> 逃逸
 }

@@ -3,3 +3,9 @@ dist/
 *.tsbuildinfo
 .DS_Store
 Thumbs.db
+
+# 测试：下载的外部样例（用 npm run fetch:samples 重新获取）
+test/fixtures/downloaded/*.pdf
+
+# 测试缓存（落盘夹具等）
+.cache/

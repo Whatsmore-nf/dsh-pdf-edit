@@ -1,3 +1,14 @@
+# dsh-pdf-edit 的 cordis 补丁行（适配 dsh 0.1.1-rc.2 插件契约）。
+# 如需自定义配置，把 config 块的注释解开并按需修改；键名见 DshPdfEditConfig。
 - insert:
     - id: pdf-edit
       name: 'dsh-pdf-edit'
+      # config:
+      #   allowedRoots:            # 允许读写的根目录（安全护栏，默认当前工作目录）
+      #     - /home/user/documents
+      #   renderMode: native       # native | browser
+      #   overflow:                # 溢出策略：shrink | clip | wrap | reject
+      #     mode: shrink
+      #     minFontSizePt: 6
+      #   glossary:                # 全局术语表
+      #     帐号: 账号

@@ -1,0 +1,45 @@
+{
+  "accuracy": {
+    "targets": 1,
+    "unitPrecision": 1,
+    "unitRecall": 1,
+    "unitF1": 1,
+    "charSimilarity": 1,
+    "exactMatchRate": 1,
+    "collateralUnits": 0
+  },
+  "layout": {
+    "unchangedCompared": 0,
+    "unchangedMaxDxPt": 0,
+    "unchangedColorMismatch": 0,
+    "unchangedFontFamilyMismatch": 0,
+    "unchangedFontSizeMismatch": 0,
+    "changedPositionKeptRate": 1,
+    "policyConformanceRate": 1
+  },
+  "integrity": {
+    "pageCountBefore": 1,
+    "pageCountAfter": 1,
+    "pageCountPreserved": true,
+    "untouchedPageTextRatio": null,
+    "staleOriginalTextRate": 1,
+    "metadataKept": null,
+    "bytesIn": 13264,
+    "bytesOut": 13124,
+    "sizeRatio": 0.99
+  },
+  "performance": {
+    "editTotalMs": 24.3,
+    "editPerOriginalPageMs": 24.3,
+    "extractBeforeMs": 11.9,
+    "extractAfterMs": 17.7,
+    "stages": {
+      "render": 17.5,
+      "merge": 1.2
+    },
+    "mode": "oracle-scripted",
+    "failures": 0,
+    "totalUnits": 1,
+    "targets": 1
+  }
+}

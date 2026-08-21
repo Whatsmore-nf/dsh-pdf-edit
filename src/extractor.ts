@@ -88,13 +88,15 @@ export class StyleLockedExtractor {
     let colorIdx = 0;
 
     for (const item of textItems) {
+      // 空项/纯空白项是 pdfjs 间距归一化的产物，不代表独立的 showText 运算，
+      // 不应消耗颜色索引（否则后续全部错位）
+      if (item.str.length === 0 || !item.str.trim()) continue;
+
       const tf: number[] = item.transform;
 
       const [vx, vy] = viewport.convertToViewportPoint(tf[4], tf[5]);
       const color = colors ? colors[colorIdx] ?? "#000000" : "#000000";
       colorIdx++;
-
-      if (item.str.length === 0) continue;
 
       const fontSize =
         Math.hypot(tf[2] ?? 0, tf[3] ?? 0) || item.height || 12;
@@ -234,6 +236,9 @@ function normalizeFontFamily(raw: string): string {
   );
 }
 
+/** 字体名白名单：来自不可信 PDF 的字体名只允许安全字符，其余直接回退到通用族 */
+const FONT_NAME_SAFE = /^[\w\s\-.,#()/]+$/;
+
 function cssFontFamily(name: string): string {
   const fallback = /hei|kai|sans|arial|helvetica|gothic|micro|yahei|pingfang/i.test(
     name,
@@ -241,8 +246,11 @@ function cssFontFamily(name: string): string {
     ? "sans-serif"
     : "serif";
 
-  const escaped = name.replace(/"/g, '\\"');
-  return `"${escaped}", ${fallback}`;
+  // 白名单校验 + 长度限制：不合法直接用 fallback，不携带任何 PDF 内容进 CSS
+  if (!FONT_NAME_SAFE.test(name) || name.length > 128) {
+    return fallback;
+  }
+  return `"${name}", ${fallback}`;
 }
 
 function safeGetFont(page: any, fontName: string): any {
@@ -261,8 +269,14 @@ async function recoverColors(page: any, OPS: any): Promise<string[] | null> {
 
     for (let i = 0; i < ops.fnArray.length; i++) {
       const fn = ops.fnArray[i];
-      const a = ops.argsArray[i];
-      const args = Array.isArray(a) ? a : [];
+      // pdfjs 的参数可能是普通数组或 Float32Array 等类型化数组
+      const rawArgs = ops.argsArray[i];
+      const args: any[] =
+        Array.isArray(rawArgs)
+          ? rawArgs
+          : ArrayBuffer.isView(rawArgs) || typeof rawArgs === "object"
+            ? Array.from(rawArgs ?? [])
+            : [];
 
       if (fn === OPS.setFillRGBColor) {
         cur = rgbHex(n255(args[0]), n255(args[1]), n255(args[2]));

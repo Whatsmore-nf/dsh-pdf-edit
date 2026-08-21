@@ -25,6 +25,8 @@ export interface EditorOptions {
   batchSize?: number;
   extractConcurrency?: number;
   aiMaxCharsPerCall?: number;
+  /** AI 调用重试退避基数（毫秒）；第 n 次重试等待 base*n。默认 400 */
+  retryBaseMs?: number;
   recoverColor?: boolean;
   strictColor?: boolean;
   overflow?: OverflowPolicy;
@@ -104,6 +106,7 @@ export class StyleLockedEditor {
       await StyleLockedExtractor.open(original),
       new AiTextEditor(chat, {
         maxCharsPerCall: o.aiMaxCharsPerCall,
+        retryBaseMs: o.retryBaseMs,
         glossary: o.glossary,
         patch: {
           strict: o.strictTids,

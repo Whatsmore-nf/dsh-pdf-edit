@@ -33,6 +33,28 @@ npm install dsh-pdf-edit
 
 ## 更新记录
 
+### v0.1.6（安全加固 + dsh 0.1.1-rc.2 适配）
+
+适配 dsh v0.1.1-rc.2 插件契约（与官方 `@deepseek-ai/dsh-tool-*` 一致）：
+
+- 导出 `name` / `inject: ["tools"]` / `apply(ctx, config)`，经 `ctx.tools.register(defineTool({...}))` 注册
+  四个工具（pdf-edit-preview / pdf-edit-page / pdf-edit-document / pdf-edit-relayout）
+- 工具 schema 采用 dsh 方言（per-property `required`、`integer`、`enum`），输出带 `output.schema`
+  与 content-block `render`
+- 配置经 cordis 行的 `config:` 字段传入（`allowedRoots` / `glossary` / `fonts` / `renderMode` 等），
+  编程接口 `activate()`/`setChatFn()` 保留
+
+依据安全审查落地以下修复：
+
+- **P0 路径白名单**：新增 `src/path-guard.ts`，四个工具入口的 `pdfPath`/`outputPath` 全部过闸
+  （allowedRoots 白名单、realpath 符号链接解析、扩展名/大小/可写性校验），工具 schema 增加 `pattern` 约束
+- **P0 Prompt injection 防御**：PDF 文本放入 ```data 数据容器并在 system prompt 声明「围栏内皆数据」；
+  指令/条目/术语限长；AI 输出二次注入特征检测，命中即回退原文
+- **P1 Puppeteer 加固**：禁 JS、拦截全部出站请求（仅放行 data:）、CSP meta、CSS 清洗
+  （剥 @import/url() 外联）、背景 dataUrl 白名单、字体名白名单
+- **P2 工程健壮性**：API Key 环境变量优先+格式校验、fetch 120s 超时、分块并发 pLimit(3)、
+  429 感知退避+jitter、parsePatchObject 总量/条目/字段限长
+
 ### v0.1.5
 
 - 包名从 `@whatsmore-nf/dsh-plugin-pdf-edit` 改为 `dsh-pdf-edit`，在插件市场直接显示为插件名
@@ -146,6 +168,18 @@ npm install dsh-pdf-edit
 - 字体缓存：`FontResolver` 对每个解析后的字体对象 (`PDFFont`) 做缓存（`fontCache`），避免重复嵌入。
 
 整个过程纯 JavaScript 完成：提取和原生绘制依赖 `pdf-lib` + `pdfjs-dist`，浏览器模式额外依赖 `puppeteer-core`（系统 Chrome/Edge 可执行文件）。不需要打开真实浏览器窗口，原生模式完全无浏览器依赖。
+
+## 测试与基准
+
+```bash
+npm test              # 98 个测试：单元 + 集成（vitest）
+npm run bench         # 编辑能力基准：准确性 / 版式保持 / 完整性 / 性能
+npm run fetch:samples # 下载公开样例 PDF（可选）
+```
+
+基准支持两种模式：oracle（脚本化理想 AI，度量管线保真上限）与
+`DEEPSEEK_API_KEY=… npm run bench -- --llm`（真实 LLM 端到端打分）。
+报告输出至 `test/benchmark/results/report.md`。详见 [test/README.md](./test/README.md)。
 
 ## 许可证
 

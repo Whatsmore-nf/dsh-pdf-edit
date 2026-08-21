@@ -1,0 +1,40 @@
+{
+  "accuracy": {
+    "note": "n/a（真实样例无逐单元 ground truth，仅评版式/完整性/性能）"
+  },
+  "layout": {
+    "unchangedCompared": 246,
+    "unchangedMaxDxPt": 0,
+    "unchangedColorMismatch": 0,
+    "unchangedFontFamilyMismatch": 0,
+    "unchangedFontSizeMismatch": 0,
+    "changedPositionKeptRate": 1,
+    "policyConformanceRate": 1
+  },
+  "integrity": {
+    "pageCountBefore": 4,
+    "pageCountAfter": 4,
+    "pageCountPreserved": true,
+    "untouchedPageTextRatio": 1,
+    "staleOriginalTextRate": 1,
+    "metadataKept": true,
+    "bytesIn": 145349,
+    "bytesOut": 140579,
+    "sizeRatio": 0.97
+  },
+  "performance": {
+    "editTotalMs": 245.3,
+    "editPerOriginalPageMs": 61.3,
+    "extractBeforeMs": 239.6,
+    "extractAfterMs": 181.2,
+    "stages": {
+      "render": 236.3,
+      "skip": 0.4,
+      "merge": 1.5
+    },
+    "mode": "oracle-scripted",
+    "failures": 0,
+    "totalUnits": 248,
+    "targets": 2
+  }
+}
