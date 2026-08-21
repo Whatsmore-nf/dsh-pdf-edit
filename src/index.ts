@@ -72,7 +72,7 @@ function getChatFn(): ChatFn {
   const apiKey = _config.apiKey ?? process.env.DEEPSEEK_API_KEY;
   if (!apiKey) {
     throw new Error(
-      "dsh-plugin-pdf-edit: apiKey 未配置，请设置 DEEPSEEK_API_KEY 环境变量或在 activate 时传入",
+      "dsh-pdf-edit: apiKey 未配置，请设置 DEEPSEEK_API_KEY 环境变量或在 activate 时传入",
     );
   }
 
