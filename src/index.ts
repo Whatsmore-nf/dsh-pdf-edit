@@ -266,8 +266,8 @@ async function pdfEditPreview(params: {
 
 export const name = "dsh-pdf-edit";
 
-/** 依赖的 dsh 服务：工具注册表 + LLM 运行时 */
-export const inject = ["tools", "llm"] as const;
+/** 依赖的 dsh 服务：工具注册表 + LLM 运行时 + 默认模型选择 */
+export const inject = ["tools", "llm", "agentDefaultModel"] as const;
 
 /**
  * 插件装载入口。config 来自 cordis.patch.yml 中本插件行的 `config:` 字段，
@@ -297,6 +297,13 @@ export async function apply(
         kind?: string;
       }>;
     };
+    agentDefaultModel?: {
+      currentSelection(): {
+        provider: string;
+        model: string;
+        reasoningEffort?: string;
+      };
+    };
   },
   config?: Partial<DshPdfEditConfig>,
 ): Promise<void> {
@@ -313,8 +320,25 @@ export async function apply(
   // 优先使用 DSH 已有 LLM 服务（ctx.llm），无需用户手动配置 key
   if (ctx.llm && !_chatFn) {
     _chatFn = async (messages, opts) => {
-      const provider = _config.provider ?? "agnes";
-      const model = _config.model ?? "agnes-2.5-flash";
+      // 优先级：用户配置 > DSH 默认模型选择 > 硬编码兜底
+      let provider = _config.provider;
+      let model = _config.model;
+
+      if (!provider || !model) {
+        try {
+          const selection = ctx.agentDefaultModel?.currentSelection();
+          if (selection) {
+            if (!provider) provider = selection.provider;
+            if (!model) model = selection.model;
+          }
+        } catch {
+          // agentDefaultModel 不可用时静默降级
+        }
+      }
+
+      // 最终兜底：若仍无值则使用 agnes（DSH 内置）
+      provider ??= "agnes";
+      model ??= "agnes-2.5-flash";
 
       const dshMessages = messages.map((m) => ({
         role: m.role as "system" | "user" | "assistant",
