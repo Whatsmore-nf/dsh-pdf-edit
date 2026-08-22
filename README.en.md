@@ -23,6 +23,8 @@ An AI-powered PDF editing plugin. Tell it what to change in natural language, an
 
 ## Install
 
+> Requires dsh `0.1.1-rc.2`; Node `>= 22`.
+
 ```bash
 # Via Harness plugin CLI (same as official plugins)
 dsh plugin --profile web add dsh-pdf-edit@latest
@@ -31,7 +33,37 @@ dsh plugin --profile web add dsh-pdf-edit@latest
 npm install dsh-pdf-edit
 ```
 
+### Seeing "Cannot read properties of undefined (reading 'prepare')"?
+
+This is a known dsh-host issue from the rc stage: when `@deepseek-ai/dsh-tools`
+is loaded more than once in the same process, the tool-scheduler Symbol misses.
+Since v0.1.7 this plugin pins it via peerDependencies to prevent that at the
+source — but a leftover copy can still trigger if you ever ran `pnpm install`
+manually inside the profile directory.
+
+Troubleshoot in order:
+
+```bash
+# 1. Check for a materialized local copy (real dir, not a symlink)
+ls -l ~/.dsh/profiles/web/node_modules/@deepseek-ai/
+
+# 2. If present, remove the core-package copies
+cd ~/.dsh/profiles/web
+pnpm remove @deepseek-ai/dsh-tools @deepseek-ai/cordis
+
+# 3. Restart dsh and verify in a NEW session (old crashed sessions are unrecoverable)
+```
+
+The plugin also probes for this at load time: if detected, it throws an error
+containing these exact recovery commands instead of crashing silently.
+
 ## Changelog
+
+### v0.1.7
+
+- Dependency restructure: `@deepseek-ai/dsh-tools` moved from dependencies into peerDependencies, pinned exactly to `0.1.1-rc.2`, preventing pnpm from materializing a second copy inside profiles (dual copies break the tool-scheduler Symbol and crash every tool)
+- Load-time guard: `apply()` probes for the scheduler before touching `ctx.tools`; on failure it throws a clear error with recovery commands instead of crashing silently
+- README install section now documents the "Cannot read properties of undefined (reading 'prepare')" troubleshooting flow; engines field declares Node >= 22
 
 ### v0.1.6
 

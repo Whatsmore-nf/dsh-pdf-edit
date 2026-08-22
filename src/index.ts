@@ -17,6 +17,7 @@ import {
   validateOutputPath,
   type PathGuardOptions,
 } from "./path-guard.js";
+import { assertSingleDshTools } from "./guard.js";
 import type { FontConfig } from "./fonts-resolver.js";
 
 import type {
@@ -38,6 +39,7 @@ export * from "./ai-editor.js";
 export * from "./validator.js";
 export * from "./native-renderer.js";
 export * from "./path-guard.js";
+export * from "./guard.js";
 export * from "./pdf-ops.js";
 export {
   TEMPLATES,
@@ -274,6 +276,9 @@ export async function apply(
   ctx: { tools: { register(definition: unknown): unknown } },
   config?: Partial<DshPdfEditConfig>,
 ): Promise<void> {
+  // 入口守卫：必须在任何 ctx.tools 访问之前（双副本诊断，见 src/guard.ts）
+  assertSingleDshTools(ctx);
+
   if (config) {
     // 仅当影响 chat 构造的键变化时才重建 chatFn，避免误清外部注入的 mock
     const chatAffecting = ["apiKey", "baseUrl", "model"] as const;

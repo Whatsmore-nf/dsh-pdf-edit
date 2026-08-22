@@ -24,13 +24,18 @@ interface RegisteredTool {
 
 function makeFakeCtx() {
   const registered = new Map<string, RegisteredTool>();
+  // 模拟健康宿主：ctx.tools 挂载 dsh-tools 调度器 Symbol（非全局注册表 Symbol）
+  const sched = Symbol("@deepseek-ai/dsh-tools.scheduler");
   const ctx = {
-    tools: {
-      register(def: RegisteredTool) {
-        registered.set(def.name, def);
-        return () => registered.delete(def.name);
+    tools: Object.assign(
+      {
+        register(def: RegisteredTool) {
+          registered.set(def.name, def);
+          return () => registered.delete(def.name);
+        },
       },
-    },
+      { [sched]: { prepare() {}, dispatch() {}, finalize() {}, finish() {} } },
+    ),
   };
   return { ctx, registered };
 }
@@ -68,9 +73,8 @@ describe("dsh 插件契约（dsh 0.1.1-rc.2）", () => {
   });
 
   it("apply 向 ctx.tools 注册 4 个工具，均带 output.schema/render", async () => {
-    const { registered } = makeFakeCtx();
-    const ctxAny = { tools: { register: (d: RegisteredTool) => void registered.set(d.name, d) } };
-    await apply(ctxAny as any);
+    const { ctx, registered } = makeFakeCtx();
+    await apply(ctx as any);
     for (const n of [
       "pdf-edit-preview",
       "pdf-edit-page",
@@ -127,9 +131,8 @@ describe("dsh 插件契约（dsh 0.1.1-rc.2）", () => {
   });
 
   async function getTool(n: string): Promise<RegisteredTool> {
-    const { registered } = makeFakeCtx();
-    const ctxAny = { tools: { register: (d: RegisteredTool) => void registered.set(d.name, d) } };
-    await apply(ctxAny as any, { allowedRoots: [root] });
+    const { ctx, registered } = makeFakeCtx();
+    await apply(ctx as any, { allowedRoots: [root] });
     const t = registered.get(n);
     if (!t) throw new Error(`工具未注册: ${n}`);
     return t;

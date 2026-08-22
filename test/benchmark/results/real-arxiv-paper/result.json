@@ -23,10 +23,10 @@
     "sizeRatio": 1.22
   },
   "performance": {
-    "editTotalMs": 11137.9,
-    "editPerOriginalPageMs": 742.5,
-    "extractBeforeMs": 1766.5,
-    "extractAfterMs": 2182.3,
+    "editTotalMs": 9347.5,
+    "editPerOriginalPageMs": 623.2,
+    "extractBeforeMs": 1877.2,
+    "extractAfterMs": 1809.4,
     "stages": {
       "mode": "per-page(预算截断)"
     },

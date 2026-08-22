@@ -1,6 +1,6 @@
 # dsh-pdf-edit PDF 编辑能力基准报告
 
-- 生成时间：2026-08-21T16:07:35.476Z
+- 生成时间：2026-08-22T01:20:50.006Z
 - 运行模式：**oracle（脚本化理想 AI）**
 - 评分口径：所有指标基于「编辑前后 PDF 重新提取」的对比与规则推导的 ground truth，见 `metrics.mjs`
 
@@ -8,16 +8,16 @@
 
 | 用例 | 目标 | 准确性 F1 | 字符相似度 | 完全匹配 | 改动位置保持 | 溢出残留 | 旧文残留率 | 页数保持 | 耗时(ms) |
 |---|---|---|---|---|---|---|---|---|---|
-| en-basic-replace | 3 | 1 | 1 | 100% | 100% | 100% | 67% | ✓ | 58.6 |
-| zh-glossary-doc | 5 | 1 | 1 | 100% | 100% | 100% | 100% | ✓ | 1148.7 |
-| multipage-report-5p | 30 | 1 | 1 | 100% | 100% | 100% | 100% | ✓ | 75.1 |
-| overflow-shrink | 3 | 1 | 0.97 | 100% | 100% | 100% | 100% | ✓ | 13.4 |
-| overflow-clip | 3 | 1 | 1 | 100% | 100% | 100% | 100% | ✓ | 13.5 |
-| overflow-reject | 3 | 1 | 1 | 100% | 100% | 100% | 100% | ✓ | 16.5 |
-| mixed-zh-en-3p | 4 | 1 | 1 | 100% | 100% | 100% | 100% | ✓ | 1283.3 |
-| real-w3c-smoke | 1 | 1 | 1 | 100% | 100% | 100% | 100% | ✓ | 24.3 |
-| real-two-column-academic | - | n/a | n/a | n/a | 100% | 100% | 100% | ✓ | 245.3 |
-| real-arxiv-paper | - | n/a | n/a | n/a | 100% | 100% | 100% | ✓ | 11137.9 |
+| en-basic-replace | 3 | 1 | 1 | 100% | 100% | 100% | 67% | ✓ | 46.4 |
+| zh-glossary-doc | 5 | 1 | 1 | 100% | 100% | 100% | 100% | ✓ | 1022.8 |
+| multipage-report-5p | 30 | 1 | 1 | 100% | 100% | 100% | 100% | ✓ | 68 |
+| overflow-shrink | 3 | 1 | 0.97 | 100% | 100% | 100% | 100% | ✓ | 9.6 |
+| overflow-clip | 3 | 1 | 1 | 100% | 100% | 100% | 100% | ✓ | 12.4 |
+| overflow-reject | 3 | 1 | 1 | 100% | 100% | 100% | 100% | ✓ | 14.7 |
+| mixed-zh-en-3p | 4 | 1 | 1 | 100% | 100% | 100% | 100% | ✓ | 1154.3 |
+| real-w3c-smoke | 1 | 1 | 1 | 100% | 100% | 100% | 100% | ✓ | 34.4 |
+| real-two-column-academic | - | n/a | n/a | n/a | 100% | 100% | 100% | ✓ | 229 |
+| real-arxiv-paper | - | n/a | n/a | n/a | 100% | 100% | 100% | ✓ | 9347.5 |
 
 ---
 
@@ -69,13 +69,13 @@
 **D. 性能**
 ```json
 {
-  "editTotalMs": 58.6,
-  "editPerOriginalPageMs": 58.6,
-  "extractBeforeMs": 324.2,
-  "extractAfterMs": 25,
+  "editTotalMs": 46.4,
+  "editPerOriginalPageMs": 46.4,
+  "extractBeforeMs": 267.5,
+  "extractAfterMs": 24.3,
   "stages": {
-    "render": 40.5,
-    "merge": 7.5
+    "render": 30.6,
+    "merge": 6
   },
   "mode": "oracle-scripted",
   "failures": 0,
@@ -127,8 +127,8 @@
   "untouchedPageTextRatio": null,
   "staleOriginalTextRate": 1,
   "metadataKept": true,
-  "bytesIn": 6477945,
-  "bytesOut": 6495697,
+  "bytesIn": 6477944,
+  "bytesOut": 6495695,
   "sizeRatio": 1
 }
 ```
@@ -136,13 +136,13 @@
 **D. 性能**
 ```json
 {
-  "editTotalMs": 1148.7,
-  "editPerOriginalPageMs": 1148.7,
-  "extractBeforeMs": 944.3,
-  "extractAfterMs": 895.2,
+  "editTotalMs": 1022.8,
+  "editPerOriginalPageMs": 1022.8,
+  "extractBeforeMs": 794.2,
+  "extractAfterMs": 800.6,
   "stages": {
-    "render": 990.1,
-    "merge": 9.2
+    "render": 879.9,
+    "merge": 8.4
   },
   "mode": "oracle-scripted",
   "failures": 0,
@@ -194,8 +194,8 @@
   "untouchedPageTextRatio": null,
   "staleOriginalTextRate": 1,
   "metadataKept": true,
-  "bytesIn": 3264,
-  "bytesOut": 5495,
+  "bytesIn": 3263,
+  "bytesOut": 5494,
   "sizeRatio": 1.68
 }
 ```
@@ -203,13 +203,13 @@
 **D. 性能**
 ```json
 {
-  "editTotalMs": 75.1,
-  "editPerOriginalPageMs": 15,
-  "extractBeforeMs": 51.1,
-  "extractAfterMs": 52,
+  "editTotalMs": 68,
+  "editPerOriginalPageMs": 13.6,
+  "extractBeforeMs": 38.2,
+  "extractAfterMs": 37.4,
   "stages": {
-    "render": 52.8,
-    "merge": 12.7
+    "render": 54.7,
+    "merge": 7.2
   },
   "mode": "oracle-scripted",
   "failures": 0,
@@ -262,7 +262,7 @@
   "staleOriginalTextRate": 1,
   "metadataKept": null,
   "bytesIn": 1054,
-  "bytesOut": 1575,
+  "bytesOut": 1574,
   "sizeRatio": 1.49
 }
 ```
@@ -270,13 +270,13 @@
 **D. 性能**
 ```json
 {
-  "editTotalMs": 13.4,
-  "editPerOriginalPageMs": 13.4,
-  "extractBeforeMs": 6.8,
-  "extractAfterMs": 9.1,
+  "editTotalMs": 9.6,
+  "editPerOriginalPageMs": 9.6,
+  "extractBeforeMs": 5.2,
+  "extractAfterMs": 6,
   "stages": {
-    "render": 5.5,
-    "merge": 2.9
+    "render": 4.8,
+    "merge": 2.2
   },
   "mode": "oracle-scripted",
   "failures": 0,
@@ -329,7 +329,7 @@
   "staleOriginalTextRate": 1,
   "metadataKept": null,
   "bytesIn": 1054,
-  "bytesOut": 1562,
+  "bytesOut": 1559,
   "sizeRatio": 1.48
 }
 ```
@@ -337,13 +337,13 @@
 **D. 性能**
 ```json
 {
-  "editTotalMs": 13.5,
-  "editPerOriginalPageMs": 13.5,
-  "extractBeforeMs": 4.6,
-  "extractAfterMs": 8.9,
+  "editTotalMs": 12.4,
+  "editPerOriginalPageMs": 12.4,
+  "extractBeforeMs": 4.3,
+  "extractAfterMs": 6.6,
   "stages": {
-    "render": 4.4,
-    "merge": 3.5
+    "render": 5.2,
+    "merge": 3.6
   },
   "mode": "oracle-scripted",
   "failures": 0,
@@ -396,7 +396,7 @@
   "staleOriginalTextRate": 1,
   "metadataKept": null,
   "bytesIn": 1054,
-  "bytesOut": 1066,
+  "bytesOut": 1063,
   "sizeRatio": 1.01
 }
 ```
@@ -404,12 +404,12 @@
 **D. 性能**
 ```json
 {
-  "editTotalMs": 16.5,
-  "editPerOriginalPageMs": 16.5,
-  "extractBeforeMs": 5.8,
-  "extractAfterMs": 4.7,
+  "editTotalMs": 14.7,
+  "editPerOriginalPageMs": 14.7,
+  "extractBeforeMs": 4.1,
+  "extractAfterMs": 4.1,
   "stages": {
-    "skip": 13.4,
+    "skip": 12,
     "merge": 0
   },
   "mode": "oracle-scripted",
@@ -471,13 +471,13 @@
 **D. 性能**
 ```json
 {
-  "editTotalMs": 1283.3,
-  "editPerOriginalPageMs": 427.8,
-  "extractBeforeMs": 860.7,
-  "extractAfterMs": 784.5,
+  "editTotalMs": 1154.3,
+  "editPerOriginalPageMs": 384.8,
+  "extractBeforeMs": 763.4,
+  "extractAfterMs": 758.2,
   "stages": {
-    "render": 981.4,
-    "merge": 3.6
+    "render": 877.3,
+    "merge": 3.4
   },
   "mode": "oracle-scripted",
   "failures": 0,
@@ -530,7 +530,7 @@
   "staleOriginalTextRate": 1,
   "metadataKept": null,
   "bytesIn": 13264,
-  "bytesOut": 13124,
+  "bytesOut": 13123,
   "sizeRatio": 0.99
 }
 ```
@@ -538,12 +538,12 @@
 **D. 性能**
 ```json
 {
-  "editTotalMs": 24.3,
-  "editPerOriginalPageMs": 24.3,
-  "extractBeforeMs": 11.9,
-  "extractAfterMs": 17.7,
+  "editTotalMs": 34.4,
+  "editPerOriginalPageMs": 34.4,
+  "extractBeforeMs": 12.5,
+  "extractAfterMs": 8.8,
   "stages": {
-    "render": 17.5,
+    "render": 26.6,
     "merge": 1.2
   },
   "mode": "oracle-scripted",
@@ -591,7 +591,7 @@
   "staleOriginalTextRate": 1,
   "metadataKept": true,
   "bytesIn": 145349,
-  "bytesOut": 140579,
+  "bytesOut": 140578,
   "sizeRatio": 0.97
 }
 ```
@@ -599,14 +599,14 @@
 **D. 性能**
 ```json
 {
-  "editTotalMs": 245.3,
-  "editPerOriginalPageMs": 61.3,
-  "extractBeforeMs": 239.6,
-  "extractAfterMs": 181.2,
+  "editTotalMs": 229,
+  "editPerOriginalPageMs": 57.2,
+  "extractBeforeMs": 268.7,
+  "extractAfterMs": 211.2,
   "stages": {
-    "render": 236.3,
-    "skip": 0.4,
-    "merge": 1.5
+    "render": 219.2,
+    "skip": 0.5,
+    "merge": 1.4
   },
   "mode": "oracle-scripted",
   "failures": 0,
@@ -661,10 +661,10 @@ arXiv:1706.03762 前 5 页，密集学术文本与数学符号。stress 测试�
 **D. 性能**
 ```json
 {
-  "editTotalMs": 11137.9,
-  "editPerOriginalPageMs": 742.5,
-  "extractBeforeMs": 1766.5,
-  "extractAfterMs": 2182.3,
+  "editTotalMs": 9347.5,
+  "editPerOriginalPageMs": 623.2,
+  "extractBeforeMs": 1877.2,
+  "extractAfterMs": 1809.4,
   "stages": {
     "mode": "per-page(预算截断)"
   },

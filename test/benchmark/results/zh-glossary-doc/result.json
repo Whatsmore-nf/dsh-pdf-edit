@@ -24,18 +24,18 @@
     "untouchedPageTextRatio": null,
     "staleOriginalTextRate": 1,
     "metadataKept": true,
-    "bytesIn": 6477945,
-    "bytesOut": 6495697,
+    "bytesIn": 6477944,
+    "bytesOut": 6495695,
     "sizeRatio": 1
   },
   "performance": {
-    "editTotalMs": 1148.7,
-    "editPerOriginalPageMs": 1148.7,
-    "extractBeforeMs": 944.3,
-    "extractAfterMs": 895.2,
+    "editTotalMs": 1022.8,
+    "editPerOriginalPageMs": 1022.8,
+    "extractBeforeMs": 794.2,
+    "extractAfterMs": 800.6,
     "stages": {
-      "render": 990.1,
-      "merge": 9.2
+      "render": 879.9,
+      "merge": 8.4
     },
     "mode": "oracle-scripted",
     "failures": 0,

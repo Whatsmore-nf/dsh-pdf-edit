@@ -29,13 +29,13 @@
     "sizeRatio": 1.49
   },
   "performance": {
-    "editTotalMs": 58.6,
-    "editPerOriginalPageMs": 58.6,
-    "extractBeforeMs": 324.2,
-    "extractAfterMs": 25,
+    "editTotalMs": 46.4,
+    "editPerOriginalPageMs": 46.4,
+    "extractBeforeMs": 267.5,
+    "extractAfterMs": 24.3,
     "stages": {
-      "render": 40.5,
-      "merge": 7.5
+      "render": 30.6,
+      "merge": 6
     },
     "mode": "oracle-scripted",
     "failures": 0,

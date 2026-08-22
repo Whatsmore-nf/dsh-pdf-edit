@@ -23,6 +23,8 @@ DeepSeek Harness 插件 —— AI 修改 PDF 文字，自动保持原版式不�
 
 ## 安装
 
+> 需要 dsh `0.1.1-rc.2`；Node `>= 22`。
+
 ```bash
 # 通过 Harness 插件 CLI（与官方插件一致）
 dsh plugin --profile web add dsh-pdf-edit@latest
@@ -31,7 +33,37 @@ dsh plugin --profile web add dsh-pdf-edit@latest
 npm install dsh-pdf-edit
 ```
 
+### 遇到 "Cannot read properties of undefined (reading 'prepare')"？
+
+这是 dsh 宿主 rc 阶段的已知问题：当 `@deepseek-ai/dsh-tools` 在进程内被加载多份时，
+工具调度器 Symbol 失配。本插件从 v0.1.7 起通过 peerDependencies（精确版本钉死）
+从源头规避；但若曾在 profile 目录下手动执行过 `pnpm install`，残留副本仍可能触发。
+
+按以下顺序排查：
+
+```bash
+# 1. 检查是否真的有本地副本（实体目录而非 symlink）
+ls -l ~/.dsh/profiles/web/node_modules/@deepseek-ai/
+
+# 2. 若有，移除核心包的本地副本
+cd ~/.dsh/profiles/web
+pnpm remove @deepseek-ai/dsh-tools @deepseek-ai/cordis
+
+# 3. 重启 dsh，并【新建会话】验证（崩溃过的旧会话日志已损坏，无法恢复）
+```
+
+插件装载时也会主动探测该问题：若命中会直接抛出带上述修复命令的明确报错，
+而不是静默崩溃。
+
 ## 更新记录
+
+### v0.1.7
+
+- 依赖声明重构：`@deepseek-ai/dsh-tools` 从 dependencies 移入 peerDependencies 并精确钉死 `0.1.1-rc.2`，
+  从源头避免 pnpm 在 profile 内物化第二份副本（双副本会使工具调度器 Symbol 失配，导致所有工具崩溃）
+- 新增装载守卫：`apply()` 首行探测工具运行时调度器是否可用，失联时抛出带修复命令的明确报错而非静默崩溃
+- README 安装章节新增 "Cannot read properties of undefined (reading 'prepare')" 故障排查指引；
+  engines 声明 Node >= 22
 
 ### v0.1.6
 

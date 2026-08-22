@@ -25,16 +25,16 @@
     "staleOriginalTextRate": 1,
     "metadataKept": null,
     "bytesIn": 13264,
-    "bytesOut": 13124,
+    "bytesOut": 13123,
     "sizeRatio": 0.99
   },
   "performance": {
-    "editTotalMs": 24.3,
-    "editPerOriginalPageMs": 24.3,
-    "extractBeforeMs": 11.9,
-    "extractAfterMs": 17.7,
+    "editTotalMs": 34.4,
+    "editPerOriginalPageMs": 34.4,
+    "extractBeforeMs": 12.5,
+    "extractAfterMs": 8.8,
     "stages": {
-      "render": 17.5,
+      "render": 26.6,
       "merge": 1.2
     },
     "mode": "oracle-scripted",
