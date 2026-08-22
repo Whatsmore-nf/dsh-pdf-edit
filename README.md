@@ -57,6 +57,21 @@ pnpm remove @deepseek-ai/dsh-tools @deepseek-ai/cordis
 
 ## 更新记录
 
+### v0.2.1
+
+- 动态读取 DSH 默认模型：通过 `ctx.agentDefaultModel.currentSelection()` 获取用户当前配置的 provider/model，替换硬编码的 agnes
+- 优先级链：用户配置 (`config.provider`/`config.model`) > DSH 默认模型 > agnes 兜底
+- 无论用户在 DSH 里用的是 deepseek、kimi、glm、minimax、openpangu、mino、claude、grok、gpt 等，插件都会自动跟随，零配置即可使用
+
+### v0.1.8
+
+- 复用 DSH 已有 LLM 服务（`ctx.llm`），无需用户手动配置 API Key
+- `inject` 增加 `"llm"` 依赖，插件通过 `ctx.llm.stream()` 调用 DSH 内置 LLM
+- 保留 DeepSeek API 直连作为 fallback（当 `ctx.llm` 不可用时）
+
+<details>
+<summary>历史版本</summary>
+
 ### v0.1.7
 
 - 依赖声明重构：`@deepseek-ai/dsh-tools` 从 dependencies 移入 peerDependencies 并精确钉死 `0.1.1-rc.2`，
@@ -108,6 +123,8 @@ pnpm remove @deepseek-ai/dsh-tools @deepseek-ai/cordis
 - 溢出处理：shrink / clip / wrap / reject
 - 术语表全局替换
 - 三种重排版模板：academic / mobile / briefing
+
+</details>
 
 ## 工作原理
 

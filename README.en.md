@@ -59,6 +59,21 @@ containing these exact recovery commands instead of crashing silently.
 
 ## Changelog
 
+### v0.2.1
+
+- Dynamically read DSH default model: use `ctx.agentDefaultModel.currentSelection()` to get the user's current provider/model, replacing hardcoded agnes
+- Priority chain: user config (`config.provider`/`config.model`) > DSH default model > agnes fallback
+- Whether the user is on deepseek, kimi, glm, minimax, openpangu, mino, claude, grok, gpt, etc., the plugin follows automatically — zero config needed
+
+### v0.1.8
+
+- Reuse DSH built-in LLM service (`ctx.llm`), no manual API Key configuration needed
+- `inject` adds `"llm"` dependency, plugin calls DSH LLM via `ctx.llm.stream()`
+- DeepSeek API direct connection kept as fallback (when `ctx.llm` is unavailable)
+
+<details>
+<summary>Historical versions</summary>
+
 ### v0.1.7
 
 - Dependency restructure: `@deepseek-ai/dsh-tools` moved from dependencies into peerDependencies, pinned exactly to `0.1.1-rc.2`, preventing pnpm from materializing a second copy inside profiles (dual copies break the tool-scheduler Symbol and crash every tool)
@@ -108,6 +123,8 @@ containing these exact recovery commands instead of crashing silently.
 - Overflow handling: shrink / clip / wrap / reject
 - Glossary global substitution
 - Three relayout templates: academic / mobile / briefing
+
+</details>
 
 ## How It Works
 
