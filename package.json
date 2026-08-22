@@ -1,6 +1,6 @@
 {
   "name": "dsh-pdf-edit",
-  "version": "0.1.7",
+  "version": "0.1.8",
   "description": "Style-locked PDF editor plugin for DeepSeek Harness — AI edits text, native renderer preserves layout",
   "type": "module",
   "main": "dist/index.js",

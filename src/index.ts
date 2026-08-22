@@ -59,6 +59,7 @@ export interface DshPdfEditConfig {
   apiKey?: string;
   baseUrl?: string;
   model?: string;
+  provider?: string;
   /** 允许读写的根目录（绝对路径）。默认 [process.cwd()]；空数组 = 完全禁用文件操作 */
   allowedRoots?: string[];
   overflow?: OverflowPolicy;
@@ -95,11 +96,11 @@ function guardOpts(): PathGuardOptions {
 function getChatFn(): ChatFn {
   if (_chatFn) return _chatFn;
 
-  // 环境变量优先；config 直传仅作兼容并告警（避免 key 进入配置文件/日志）
+  // fallback：当 ctx.llm 不可用时，通过环境变量或 config 直连 DeepSeek API
   const apiKey = process.env.DEEPSEEK_API_KEY ?? _config.apiKey;
   if (!apiKey) {
     throw new Error(
-      "dsh-pdf-edit: 请设置 DEEPSEEK_API_KEY 环境变量（或在配置中传入 apiKey）",
+      "dsh-pdf-edit: 未检测到 DSH LLM 服务，请设置 DEEPSEEK_API_KEY 环境变量（或在配置中传入 apiKey）",
     );
   }
   if (!/^sk-[A-Za-z0-9\-_]{8,}$/.test(apiKey)) {
@@ -265,15 +266,38 @@ async function pdfEditPreview(params: {
 
 export const name = "dsh-pdf-edit";
 
-/** 依赖的 dsh 服务：工具注册表 */
-export const inject = ["tools"] as const;
+/** 依赖的 dsh 服务：工具注册表 + LLM 运行时 */
+export const inject = ["tools", "llm"] as const;
 
 /**
  * 插件装载入口。config 来自 cordis.patch.yml 中本插件行的 `config:` 字段，
  * 键名与 DshPdfEditConfig 一致（如 allowedRoots / glossary / fonts / renderMode）。
  */
 export async function apply(
-  ctx: { tools: { register(definition: unknown): unknown } },
+  ctx: {
+    tools: { register(definition: unknown): unknown };
+    llm?: {
+      stream(options: {
+        provider: string;
+        model: string;
+        messages: Array<{
+          role: "system" | "user" | "assistant";
+          content: Array<{ type: string; text?: string }>;
+          source: { kind: string; plugin: string };
+        }>;
+        system?: string;
+        temperature?: number;
+        maxTokens?: number;
+        signal?: AbortSignal;
+      }): AsyncIterable<{
+        type: string;
+        index?: number;
+        text?: string;
+        block?: { type: string; text?: string };
+        kind?: string;
+      }>;
+    };
+  },
   config?: Partial<DshPdfEditConfig>,
 ): Promise<void> {
   // 入口守卫：必须在任何 ctx.tools 访问之前（双副本诊断，见 src/guard.ts）
@@ -281,9 +305,43 @@ export async function apply(
 
   if (config) {
     // 仅当影响 chat 构造的键变化时才重建 chatFn，避免误清外部注入的 mock
-    const chatAffecting = ["apiKey", "baseUrl", "model"] as const;
+    const chatAffecting = ["apiKey", "baseUrl", "model", "provider"] as const;
     if (chatAffecting.some((k) => k in config)) _chatFn = null;
     _config = { ..._config, ...config };
+  }
+
+  // 优先使用 DSH 已有 LLM 服务（ctx.llm），无需用户手动配置 key
+  if (ctx.llm && !_chatFn) {
+    _chatFn = async (messages, opts) => {
+      const provider = _config.provider ?? "agnes";
+      const model = _config.model ?? "agnes-2.5-flash";
+
+      const dshMessages = messages.map((m) => ({
+        role: m.role as "system" | "user" | "assistant",
+        content: [{ type: "text" as const, text: m.content }],
+        source: { kind: "plugin" as const, plugin: "dsh-pdf-edit" },
+      }));
+
+      const chunks: string[] = [];
+      for await (const chunk of ctx.llm!.stream({
+        provider,
+        model,
+        messages: dshMessages,
+        temperature: opts?.temperature ?? 0.1,
+        maxTokens: opts?.maxTokens,
+      })) {
+        if (chunk.type === "text-delta" && chunk.text) {
+          chunks.push(chunk.text);
+        } else if (
+          chunk.type === "block-end" &&
+          chunk.block?.type === "text" &&
+          chunk.block.text
+        ) {
+          chunks.push(chunk.block.text);
+        }
+      }
+      return chunks.join("");
+    };
   }
 
   // 延迟加载：本地开发环境未安装 dsh-tools 时模块本身仍可导入（供测试）
