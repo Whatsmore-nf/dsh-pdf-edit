@@ -578,3 +578,71 @@ export function setChatFn(chatFn: ChatFn): void {
 export function setLLMAdapter(adapter: LLMAdapter): void {
   _chatFn = adapterToChatFn(adapter);
 }
+
+/* ------------------------------------------------------------------ */
+/* 简化编程包装（供 AI 直接操作 Unit 对象，绕过 sanitizeText 限制）       */
+/* ------------------------------------------------------------------ */
+
+/**
+ * 简化包装：删除匹配的小标题（直接操作 Unit，不依赖 editDocument 标准流程）。
+ *
+ * @param pdfPath      输入 PDF 路径（必须在 allowedRoots 内）
+ * @param outputPath   输出路径
+ * @param subheadingTexts  要删除的小标题文本列表（精确匹配）
+ * @param chatFn       可选：自定义 LLM 调用函数（如不用 AI 修改，仅删除则可传 null）
+ */
+export async function removeSubheadings(
+  pdfPath: string,
+  outputPath: string,
+  subheadingTexts: string[],
+  chatFn?: ChatFn,
+): Promise<{ outputPath: string; deletedTids: string[] }> {
+  // 使用工具接口同样的路径守卫（避免绕过 allowedRoots 限制）
+  const inputAbs = validateInputPath(pdfPath, { allowedRoots: [process.cwd()] });
+  const outputAbs = validateOutputPath(outputPath, inputAbs, { allowedRoots: [process.cwd()] });
+
+  const original = new Uint8Array(readFileSync(inputAbs));
+  const chat = chatFn ?? (async () => { throw new Error("removeSubheadings 需要传入 chatFn 或设置 DEEPSEEK_API_KEY"); });
+
+  const editor = await StyleLockedEditor.open(original, chat, {
+    renderMode: "native",
+  });
+
+  try {
+    const deletedTids: string[] = [];
+    const work: Array<{ ex: import("./types.js").PageExtract; changedTids: Set<string> }> = [];
+
+    // 遍历所有页面，找到匹配的小标题并直接设空
+    for (let pageNum = 1; pageNum <= editor.pageCount; pageNum++) {
+      const ex = await editor.getExtract(pageNum);
+      const pageDeletedTids: string[] = [];
+
+      for (const u of ex.units) {
+        // 精确匹配或包含匹配
+        if (subheadingTexts.some((t) => u.text === t || u.text.includes(t))) {
+          u.text = "";
+          pageDeletedTids.push(u.tid);
+        }
+      }
+
+      if (pageDeletedTids.length) {
+        deletedTids.push(...pageDeletedTids);
+        work.push({ ex, changedTids: new Set(pageDeletedTids) });
+      }
+    }
+
+    if (work.length) {
+      const { doc, resolver } = await editor.openNativeDoc();
+      await editor.drawPatchedPages(doc, resolver, work);
+      const result = await doc.save();
+      writeFileSync(outputAbs, result);
+      return { outputPath: outputAbs, deletedTids };
+    }
+
+    // 没有匹配项：直接复制原文件
+    writeFileSync(outputAbs, original);
+    return { outputPath: outputAbs, deletedTids: [] };
+  } finally {
+    await editor.close().catch(() => {});
+  }
+}

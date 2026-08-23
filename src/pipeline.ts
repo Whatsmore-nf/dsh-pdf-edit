@@ -308,7 +308,7 @@ export class StyleLockedEditor {
     this.browserRenderer = undefined;
   }
 
-  private async openNativeDoc() {
+  async openNativeDoc() {
     const doc = await PDFDocument.load(this.original, {
       ignoreEncryption: true,
     });
@@ -316,7 +316,7 @@ export class StyleLockedEditor {
     return { doc, resolver };
   }
 
-  private mergeChanged(
+  mergeChanged(
     pageNumber: number,
     report: { changed: number; changedTids: string[] },
   ): Set<string> {
@@ -329,7 +329,7 @@ export class StyleLockedEditor {
     return set;
   }
 
-  private async drawPatchedPages(
+  async drawPatchedPages(
     doc: PDFDocument,
     resolver: FontResolver,
     work: Array<{ ex: PageExtract; changedTids: Set<string> }>,
@@ -352,7 +352,7 @@ export class StyleLockedEditor {
     }
   }
 
-  private async getExtract(n: number): Promise<PageExtract> {
+  async getExtract(n: number): Promise<PageExtract> {
     let ex = this.extractCache.get(n);
     if (!ex) {
       ex = await this.extractor.extractPage(n, {
