@@ -2,7 +2,7 @@
 
 > [English](./README.en.md) | 中文
 
-**版本：`v0.2.2`**（当前） | 需要 `dsh >= 0.1.1-rc.2` / `Node >= 22`
+**版本：`v0.3.0`**（当前） | 需要 `dsh >= 0.1.1-rc.2` / `Node >= 22`
 
 DeepSeek Harness 插件 —— AI 修改 PDF 文字，自动保持原版式不变。
 
