@@ -2,19 +2,59 @@
 
 > [English](./README.en.md) | 中文
 
+**版本：`v0.2.2`**（当前） | 需要 `dsh >= 0.1.1-rc.2` / `Node >= 22`
+
 DeepSeek Harness 插件 —— AI 修改 PDF 文字，自动保持原版式不变。
 
-> 🧠 **AI Agent 快速入门**（直接编程调用，绕过工具接口的 `allowedRoots` 限制）
->
-> ```js
-> const { StyleLockedEditor } = require('dsh-pdf-edit');
-> const editor = await StyleLockedEditor.open(pdfBytes, chatFn, {
->   allowedRoots: ['/workspace'],   // 编程接口仍受此限制（见下文）
->   overflow: { mode: 'shrink', minFontSizePt: 6 },
->   renderMode: 'native',
-> });
-> // 如需删除文字：直接操作 unit.text = '' 再手动 drawPatchedPages（见下文限制）
-> ```
+## 这是什么
+
+一个面向 PDF 文档的 AI 编辑插件。你用自然语言告诉它要改什么，它就会：
+
+- **只改文字，不动排版** —— 字体、字号、颜色、位置全部锁定，改完和原文看起来一模一样
+- **自动处理溢出** —— 新文字比原来长时，自动缩小字号或截断，不会撑破版面
+- **支持中文** —— 自动识别并嵌入系统中文字体（SimHei / 微软雅黑 / Noto Sans CJK）
+
+## 适合什么场景
+
+| 场景 | 举例 |
+|---|---|
+| **术语统一** | 全文把「帐号」改成「账号」、「数据中台」改成「数据平台」 |
+| **错别字修正** | 让 AI 扫一遍，自动修正拼写和语法错误 |
+| **合同/报告批量修改** | 多页文档统一替换人名、金额、日期等 |
+| **格式转换** | 把散乱的 PDF 重新排版成学术论文双栏、手机阅读单栏、商务简报等版式 |
+
+## 安装
+
+```bash
+# 通过 Harness 插件 CLI（与官方插件一致）
+dsh plugin --profile web add dsh-pdf-edit@latest
+
+# 或直接通过 npm
+npm install dsh-pdf-edit
+```
+
+> 当前版本：`v0.2.2`（2026-08-23 发布）。主要更新：README 增加 AI Agent 操作手册、`removeSubheadings()` 完整实现、关键编程方法（`getExtract` / `drawPatchedPages` / `openNativeDoc`）公开为公共接口。
+
+### 遇到 "Cannot read properties of undefined (reading 'prepare')"？
+
+这是 dsh 宿主 rc 阶段的已知问题：当 `@deepseek-ai/dsh-tools` 在进程内被加载多份时，工具调度器 Symbol 失配。本插件从 v0.1.7 起通过 peerDependencies（精确版本钉死 `0.1.1-rc.2`）从源头规避；但若曾在 profile 目录下手动执行过 `pnpm install`，残留副本仍可能触发。
+
+按以下顺序排查：
+
+```bash
+# 1. 检查是否真的有本地副本（实体目录而非 symlink）
+ls -l ~/.dsh/profiles/web/node_modules/@deepseek-ai/
+
+# 2. 若有，移除核心包的本地副本
+cd ~/.dsh/profiles/web
+pnpm remove @deepseek-ai/dsh-tools @deepseek-ai/cordis
+
+# 3. 重启 dsh，并【新建会话】验证（崩溃过的旧会话日志已损坏，无法恢复）
+```
+
+插件装载时也会主动探测该问题：若命中会直接抛出带上述修复命令的明确报错，而不是静默崩溃。
+
+---
 
 ## AI Agent 操作手册（隐藏规则）
 
@@ -29,7 +69,7 @@ DeepSeek Harness 插件 —— AI 修改 PDF 文字，自动保持原版式不�
 ### 编程接口简要示例
 
 ```js
-const { StyleLockedEditor, applyPatches } = require('dsh-pdf-edit');
+const { StyleLockedEditor, applyPatches, removeSubheadings } = require('dsh-pdf-edit');
 
 // 1. 打开文档（需 Uint8Array）
 const original = new Uint8Array(require('fs').readFileSync('doc.pdf'));
@@ -45,7 +85,6 @@ require('fs').writeFileSync('doc.edited.pdf', result);
 
 // 4. 手动删除文字（绕过 sanitizeText 空文本限制）—— 完整可运行示例
 const fs = require('fs');
-const { PDFDocument } = require('pdf-lib');
 
 // 4a. 提取页面并找到要删除的 tid（getExtract 已开放为公共方法）
 const ex = await editor.getExtract(1);
@@ -69,6 +108,18 @@ if (deleteTid) {
 await editor.close();
 ```
 
+### 简化删除包装（v0.2.2 新增）
+
+```js
+const { removeSubheadings } = require('dsh-pdf-edit');
+// 直接删除匹配的小标题文本（精确匹配或包含匹配）
+const { outputPath, deletedTids } = await removeSubheadings(
+  'doc.pdf', 'doc-deleted.pdf',
+  ['第一章 小标题', '附录 A'],
+  chatFn  // 可选：自定义 LLM 调用函数
+);
+```
+
 ### 依赖说明
 
 - 核心：`pdf-lib`（PDF 操作）+ `pdfjs-dist`（文本提取）
@@ -84,64 +135,21 @@ await editor.close();
 |---|---|---|---|
 | 修正错别字 / 统一术语 | 工具 `pdf-edit-document` 或编程 `editDocument()` | `editDocument('指令')` | 无（标准流程） |
 | 预览可编辑单元 | 工具 `pdf-edit-preview` 或编程 `previewPage()` | `previewPage(n)` | 无 |
-| **删除文字**（设空） | **编程接口**（见上文完整示例） | `getExtract` → `unit.text=''` → `drawPatchedPages` | `sanitizeText` 拒收空字符串；`editDocument` 会回填 |
+| **删除文字**（设空） | **编程接口** `removeSubheadings()` 或手动操作 | `getExtract` → `unit.text=''` → `drawPatchedPages` | `sanitizeText` 拒收空字符串；`editDocument` 会回填 |
 | 版式重排 | 工具 `pdf-edit-relayout` 或编程 `relayout()` | `relayout('academic'\|'mobile'\|'briefing')` | 无 |
 | 自定义字体 / 颜色修复 | 编程接口 + 配置 `fonts` | `StyleLockedEditor.open(pdf, chat, { fonts })` | 工具接口不暴露字体配置细节 |
 
 > 💡 **路径解析提示**：若 `pdfPath` 解析到 `/home/wang/Desktop` 而非预期目录，说明 `process.cwd()` 与实际文件位置不匹配。编程调用时显式传入绝对路径：`const pdfPath = require('path').resolve('Document.pdf');`，并在 `allowedRoots` 中包含该路径的真实父目录（如 `['/workspace']` 或 `['/home/wang/dsh-pdf-edit']`）。
 
-## 这是什么
-
-一个面向 PDF 文档的 AI 编辑插件。你用自然语言告诉它要改什么，它就会：
-
-- **只改文字，不动排版** —— 字体、字号、颜色、位置全部锁定，改完和原文看起来一模一样
-- **自动处理溢出** —— 新文字比原来长时，自动缩小字号或截断，不会撑破版面
-- **支持中文** —— 自动识别并嵌入系统中文字体（SimHei / 微软雅黑 / Noto Sans CJK）
-
-## 适合什么场景
-
-| 场景 | 举例 |
-|---|---|
-| **术语统一** | 全文把「帐号」改成「账号」、「数据中台」改成「数据平台」 |
-| **错别字修正** | 让 AI 扫一遍，自动修正拼写和语法错误 |
-| **合同/报告批量修改** | 多页文档统一替换人名、金额、日期等 |
-| **格式转换** | 把散乱的 PDF 重新排版成学术论文双栏、手机阅读单栏、商务简报等版式 |
-
-## 安装
-
-> 需要 dsh `0.1.1-rc.2`；Node `>= 22`。
-
-```bash
-# 通过 Harness 插件 CLI（与官方插件一致）
-dsh plugin --profile web add dsh-pdf-edit@latest
-
-# 或直接通过 npm
-npm install dsh-pdf-edit
-```
-
-### 遇到 "Cannot read properties of undefined (reading 'prepare')"？
-
-这是 dsh 宿主 rc 阶段的已知问题：当 `@deepseek-ai/dsh-tools` 在进程内被加载多份时，
-工具调度器 Symbol 失配。本插件从 v0.1.7 起通过 peerDependencies（精确版本钉死）
-从源头规避；但若曾在 profile 目录下手动执行过 `pnpm install`，残留副本仍可能触发。
-
-按以下顺序排查：
-
-```bash
-# 1. 检查是否真的有本地副本（实体目录而非 symlink）
-ls -l ~/.dsh/profiles/web/node_modules/@deepseek-ai/
-
-# 2. 若有，移除核心包的本地副本
-cd ~/.dsh/profiles/web
-pnpm remove @deepseek-ai/dsh-tools @deepseek-ai/cordis
-
-# 3. 重启 dsh，并【新建会话】验证（崩溃过的旧会话日志已损坏，无法恢复）
-```
-
-插件装载时也会主动探测该问题：若命中会直接抛出带上述修复命令的明确报错，
-而不是静默崩溃。
+---
 
 ## 更新记录
+
+### v0.2.2
+
+- README 重构：人类内容（这是什么 / 安装 / 版本号）前置，AI Agent 操作手册后置
+- `removeSubheadings()` 完整实现（不再抛错误，支持精确/包含匹配、多页累积渲染）
+- 关键编程方法公开：`getExtract`、`openNativeDoc`、`drawPatchedPages`、`mergeChanged`
 
 ### v0.2.1
 
@@ -149,14 +157,14 @@ pnpm remove @deepseek-ai/dsh-tools @deepseek-ai/cordis
 - 优先级链：用户配置 (`config.provider`/`config.model`) > DSH 默认模型 > agnes 兜底
 - 无论用户在 DSH 里用的是 deepseek、kimi、glm、minimax、openpangu、mino、claude、grok、gpt 等，插件都会自动跟随，零配置即可使用
 
+<details>
+<summary>历史版本</summary>
+
 ### v0.1.8
 
 - 复用 DSH 已有 LLM 服务（`ctx.llm`），无需用户手动配置 API Key
 - `inject` 增加 `"llm"` 依赖，插件通过 `ctx.llm.stream()` 调用 DSH 内置 LLM
 - 保留 DeepSeek API 直连作为 fallback（当 `ctx.llm` 不可用时）
-
-<details>
-<summary>历史版本</summary>
 
 ### v0.1.7
 
@@ -210,7 +218,9 @@ pnpm remove @deepseek-ai/dsh-tools @deepseek-ai/cordis
 - 术语表全局替换
 - 三种重排版模板：academic / mobile / briefing
 
-</details>
+</<details>
+
+---
 
 ## 工作原理
 
@@ -299,9 +309,7 @@ npm run bench         # 编辑能力基准：准确性 / 版式保持 / 完整�
 npm run fetch:samples # 下载公开样例 PDF（可选）
 ```
 
-基准支持两种模式：oracle（脚本化理想 AI，度量管线保真上限）与
-`DEEPSEEK_API_KEY=… npm run bench -- --llm`（真实 LLM 端到端打分）。
-报告输出至 `test/benchmark/results/report.md`。详见 [test/README.md](./test/README.md)。
+基准支持两种模式：oracle（脚本化理想 AI，度量管线保真上限）与 `DEEPSEEK_API_KEY=… npm run bench -- --llm`（真实 LLM 端到端打分）。报告输出至 `test/benchmark/results/report.md`。详见 [test/README.md](./test/README.md)。
 
 ## 许可证
 
