@@ -35,6 +35,31 @@ function underRoot(abs: string, roots: string[]): boolean {
   });
 }
 
+/**
+ * 合并配置根目录与本次调用额外放行的根目录（去重、保序）。
+ * GUI 工作目录常与 dsh 服务 cwd 不一致，允许按调用临时放行是工具层的兜底。
+ */
+export function withExtraRoots(
+  configured: string[] | undefined,
+  extra: string[] | undefined,
+): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const r of [...(configured ?? []), ...(extra ?? [])]) {
+    const abs = resolve(r);
+    if (!seen.has(abs)) {
+      seen.add(abs);
+      out.push(abs);
+    }
+  }
+  return out;
+}
+
+/** 人类可读的允许根目录列表（供报错提示） */
+export function rootsText(roots: string[]): string {
+  return roots.length ? roots.join("、") : "（未配置任何根目录）";
+}
+
 function checkExtension(abs: string, exts: string[]): void {
   const ext = parse(abs).ext.toLowerCase();
   if (!exts.includes(ext)) {
@@ -58,7 +83,9 @@ export function validateInputPath(
   const abs = resolve(rawPath);
   if (!o.allowedRoots.length) throw new Error("未配置 allowedRoots，已禁止所有文件读取");
   if (!underRoot(abs, o.allowedRoots)) {
-    throw new Error(`路径 ${abs} 不在允许的目录范围内`);
+    throw new Error(
+      `路径 ${abs} 不在允许的目录范围内（当前允许：${rootsText(o.allowedRoots)}；可在工具参数或插件配置中放行）`,
+    );
   }
 
   let real: string;
@@ -68,7 +95,9 @@ export function validateInputPath(
     throw new Error(`文件不存在或不可访问: ${abs}`);
   }
   if (!underRoot(real, o.allowedRoots)) {
-    throw new Error(`路径经符号链接解析后越界: ${abs} -> ${real}`);
+    throw new Error(
+      `路径经符号链接解析后越界: ${abs} -> ${real}（允许：${rootsText(o.allowedRoots)}）`,
+    );
   }
 
   const st = statSync(real);
@@ -109,7 +138,9 @@ export function validateOutputPath(
     dirname(abs) === inputDir ||
     (o.allowedRoots.length > 0 && underRoot(abs, o.allowedRoots));
   if (!dirAllowed) {
-    throw new Error(`输出路径 ${abs} 不在输入同目录或允许的目录范围内`);
+    throw new Error(
+      `输出路径 ${abs} 不在输入同目录或允许的目录范围内（当前允许：${rootsText(o.allowedRoots)}）`,
+    );
   }
   checkExtension(abs, o.allowedExtensions);
 

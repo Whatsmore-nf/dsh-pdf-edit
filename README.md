@@ -2,7 +2,7 @@
 
 > [English](./README.en.md) | 中文
 
-**版本：`v0.3.0`**（当前） | 需要 `dsh >= 0.1.1-rc.2` / `Node >= 22`
+**版本：`v0.3.1`**（当前） | 需要 `dsh >= 0.1.1-rc.2` / `Node >= 22`
 
 DeepSeek Harness 插件 —— AI 修改 PDF 文字，自动保持原版式不变。
 
@@ -34,7 +34,7 @@ dsh plugin --profile web add dsh-pdf-edit@latest
 npm install dsh-pdf-edit
 ```
 
-> 当前版本：`v0.3.0`（2026-08-23 发布）。主要更新：新增「插入内容」能力（工具 `pdf-edit-insert` + 编程接口 `insertPages` / `parseMarkdownBlocks`，无需 LLM）、`FontResolver` 字形覆盖查询与回退链（`resolveRuns` / `hasGlyph` / `fonts.fallbacks`）、系统 CJK 字体候选补充、CFF 回退字体全文嵌入修复。
+> 当前版本：`v0.3.1`（2026-08-23 发布）。主要更新：工具层路径白名单体验修复（报错带出允许根目录、按调用传 allowedRoots）、`pdf-edit-insert` 支持 markdown 文本；v0.3.0 新增插入内容能力与字体回退链。
 
 ### 遇到 "Cannot read properties of undefined (reading 'prepare')"？
 
@@ -192,6 +192,12 @@ const { bytes, insertedPages, totalPages } = await insertPages(
 ---
 
 ## 更新记录
+
+### v0.3.1
+
+- **工具层路径白名单体验修复**：越界报错现在会带出「当前允许的根目录」；5 个工具（page/document/relayout/preview/insert）都支持按调用传 `allowedRoots`，与插件配置合并后放行——GUI 工作目录与 dsh 服务 cwd 不一致时不再需要改服务配置
+- **`pdf-edit-insert` 支持 markdown 文本**：`insertions[].markdown` 直接传 md（`#`标题 / `-`要点 / 缩进子要点 / `eq:`公式 / `---`分隔），内部经 `parseMarkdownBlocks` 解析，与 `blocks` 合并
+- 路径守卫新增 `withExtraRoots()` / `rootsText()` 辅助；测试 +4（全套 137 例通过）
 
 ### v0.3.0
 

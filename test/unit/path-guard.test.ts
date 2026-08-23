@@ -5,7 +5,9 @@ import { join, resolve } from "node:path";
 import {
   validateInputPath,
   validateOutputPath,
+  withExtraRoots,
 } from "../../src/path-guard.js";
+import { realpathSync } from "node:fs";
 
 describe("path-guard（安全审查 #1：任意文件读写）", () => {
   let root: string;
@@ -129,5 +131,43 @@ describe("path-guard（安全审查 #1：任意文件读写）", () => {
   it("relayout 默认后缀可自定义（.relayout.pdf）", () => {
     const out = validateOutputPath(undefined, pdfPath, opts(), ".relayout.pdf");
     expect(out).toBe(resolve(join(root, "sample.relayout.pdf")));
+  });
+});
+
+describe("path-guard/withExtraRoots + 报错信息（v0.3.1）", () => {
+  it("withExtraRoots：配置根 + 本次调用额外根合并去重（解析为绝对路径）", () => {
+    const merged = withExtraRoots(["/tmp"], ["/tmp", "/home/user/ws"]);
+    expect(merged).toContain(resolve("/tmp"));
+    expect(merged).toContain(resolve("/home/user/ws"));
+    expect(merged.filter((r) => r === resolve("/tmp")).length).toBe(1); // 去重
+  });
+
+  it("withExtraRoots：未配置时仅额外根生效", () => {
+    expect(withExtraRoots(undefined, ["/home/user/ws"])).toEqual([
+      resolve("/home/user/ws"),
+    ]);
+  });
+
+  it("越界报错信息包含当前允许的根目录，便于用户对配置", () => {
+    expect(() =>
+      validateInputPath("/etc/passwd", { allowedRoots: ["/tmp"] }),
+    ).toThrow(/不在允许的目录范围内.*\/tmp/);
+  });
+
+  it("按调用传 extra roots 可放行工作目录外的文件（工具层兜底）", () => {
+    // 在 /tmp 建一个文件，配置根为 /home 不允许，但 extraRoots 加 /tmp 后放行
+    const f = join("/tmp", `guard-extra-${process.pid}.pdf`);
+    writeFileSync(f, "%PDF-1.4\n%EOF");
+    try {
+      expect(() =>
+        validateInputPath(f, { allowedRoots: ["/home"] }),
+      ).toThrow(/不在允许的目录范围内/);
+      const ok = validateInputPath(f, {
+        allowedRoots: withExtraRoots(["/home"], ["/tmp"]),
+      });
+      expect(ok).toBe(realpathSync(f));
+    } finally {
+      rmSync(f, { force: true });
+    }
   });
 });

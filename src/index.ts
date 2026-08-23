@@ -16,6 +16,7 @@ import type { InsertBlockType } from "./inserter.js";
 import {
   validateInputPath,
   validateOutputPath,
+  withExtraRoots,
   type PathGuardOptions,
 } from "./path-guard.js";
 import { assertSingleDshTools } from "./guard.js";
@@ -90,9 +91,14 @@ const DEFAULT_CONFIG: DshPdfEditConfig = {
 let _config: DshPdfEditConfig = { ...DEFAULT_CONFIG };
 let _chatFn: ChatFn | null = null;
 
-/** 工具入参路径守卫选项：allowedRoots 未配置时锁在 cwd。 */
-function guardOpts(): PathGuardOptions {
-  return { allowedRoots: _config.allowedRoots ?? [process.cwd()] };
+/** 工具入参路径守卫选项：allowedRoots 未配置时锁在 cwd；可按调用额外放行。 */
+function guardOpts(extraRoots?: string[]): PathGuardOptions {
+  return {
+    allowedRoots: withExtraRoots(
+      _config.allowedRoots ?? [process.cwd()],
+      extraRoots,
+    ),
+  };
 }
 
 function getChatFn(): ChatFn {
@@ -148,9 +154,10 @@ async function pdfEditPage(params: {
   instruction: string;
   targetTids?: string[];
   outputPath?: string;
+  allowedRoots?: string[];
 }): Promise<{ outputPath: string; changed: boolean }> {
-  const inputAbs = validateInputPath(params.pdfPath, guardOpts());
-  const outputAbs = validateOutputPath(params.outputPath, inputAbs, guardOpts());
+  const inputAbs = validateInputPath(params.pdfPath, guardOpts(params.allowedRoots));
+  const outputAbs = validateOutputPath(params.outputPath, inputAbs, guardOpts(params.allowedRoots));
   const chat = getChatFn();
   const original = new Uint8Array(readFileSync(inputAbs));
 
@@ -179,13 +186,14 @@ async function pdfEditDocument(params: {
   pdfPath: string;
   instruction: string;
   outputPath?: string;
+  allowedRoots?: string[];
 }): Promise<{
   outputPath: string;
   failures: Array<{ page: number; error: string }>;
   warnings: string[];
 }> {
-  const inputAbs = validateInputPath(params.pdfPath, guardOpts());
-  const outputAbs = validateOutputPath(params.outputPath, inputAbs, guardOpts());
+  const inputAbs = validateInputPath(params.pdfPath, guardOpts(params.allowedRoots));
+  const outputAbs = validateOutputPath(params.outputPath, inputAbs, guardOpts(params.allowedRoots));
   const chat = getChatFn();
   const original = new Uint8Array(readFileSync(inputAbs));
 
@@ -213,8 +221,9 @@ async function pdfEditRelayout(params: {
   pdfPath: string;
   templateId: "academic" | "mobile" | "briefing";
   outputPath?: string;
+  allowedRoots?: string[];
 }): Promise<{ outputPath: string }> {
-  const inputAbs = validateInputPath(params.pdfPath, guardOpts());
+  const inputAbs = validateInputPath(params.pdfPath, guardOpts(params.allowedRoots));
   const outputAbs = validateOutputPath(
     params.outputPath,
     inputAbs,
@@ -238,11 +247,12 @@ async function pdfEditRelayout(params: {
 async function pdfEditPreview(params: {
   pdfPath: string;
   pageNumber: number;
+  allowedRoots?: string[];
 }): Promise<{
   units: Array<{ tid: string; text: string }>;
   pageCount: number;
 }> {
-  const inputAbs = validateInputPath(params.pdfPath, guardOpts());
+  const inputAbs = validateInputPath(params.pdfPath, guardOpts(params.allowedRoots));
   const chat = getChatFn();
   const original = new Uint8Array(readFileSync(inputAbs));
 
@@ -271,35 +281,50 @@ async function pdfEditInsert(params: {
     afterPage: number;
     title: string;
     caption?: string;
-    blocks: Array<{ t: string; s: string }>;
+    /** 结构化块（t: h2/p/b/b2/eq/gap） */
+    blocks?: Array<{ t: string; s: string }>;
+    /** 便捷写法：markdown 文本，内部经 parseMarkdownBlocks 解析，与 blocks 合并 */
+    markdown?: string;
   }>;
   outputPath?: string;
+  allowedRoots?: string[];
 }): Promise<{
   outputPath: string;
   insertedPages: number;
   totalPages: number;
 }> {
-  const inputAbs = validateInputPath(params.pdfPath, guardOpts());
+  const inputAbs = validateInputPath(params.pdfPath, guardOpts(params.allowedRoots));
   const outputAbs = validateOutputPath(
     params.outputPath,
     inputAbs,
-    guardOpts(),
+    guardOpts(params.allowedRoots),
     ".inserted.pdf",
   );
   const original = new Uint8Array(readFileSync(inputAbs));
 
-  const { insertPages } = await import("./inserter.js");
+  const { insertPages, parseMarkdownBlocks } = await import("./inserter.js");
   const result = await insertPages(
     original,
-    params.insertions.map((ins) => ({
-      afterPage: ins.afterPage,
-      title: ins.title,
-      caption: ins.caption,
-      blocks: ins.blocks.map((b) => ({
-        t: b.t as InsertBlockType,
-        s: b.s,
-      })),
-    })),
+    params.insertions.map((ins) => {
+      const blocks: Array<{ t: InsertBlockType; s: string }> = [
+        ...(ins.blocks ?? []).map((b) => ({
+          t: b.t as InsertBlockType,
+          s: b.s,
+        })),
+        ...(ins.markdown ? parseMarkdownBlocks(ins.markdown) : []),
+      ];
+      if (blocks.length === 0) {
+        throw new Error(
+          `insertions[afterPage=${ins.afterPage}] 缺少内容：请提供 blocks 或 markdown`,
+        );
+      }
+      return {
+        afterPage: ins.afterPage,
+        title: ins.title,
+        caption: ins.caption,
+        blocks,
+      };
+    }),
     { fonts: _config.fonts },
   );
   writeFileSync(outputAbs, result.bytes);
@@ -443,6 +468,11 @@ export async function apply(
           required: true,
           description: "要预览的页码（1-based）",
         },
+        allowedRoots: {
+          type: "array",
+          items: { type: "string" },
+          description: "可选：本次调用额外放行的绝对路径根目录（与插件配置的 allowedRoots 合并）",
+        },
       },
       output: {
         schema: {
@@ -501,6 +531,11 @@ export async function apply(
           type: "string",
           description: "输出文件路径，默认在原文件名后加 .edited",
         },
+        allowedRoots: {
+          type: "array",
+          items: { type: "string" },
+          description: "可选：本次调用额外放行的绝对路径根目录（与插件配置的 allowedRoots 合并），如 [\"/home/user/workspace\"]",
+        },
       },
       output: {
         schema: {
@@ -537,6 +572,11 @@ export async function apply(
         outputPath: {
           type: "string",
           description: "输出文件路径，默认在原文件名后加 .edited",
+        },
+        allowedRoots: {
+          type: "array",
+          items: { type: "string" },
+          description: "可选：本次调用额外放行的绝对路径根目录（与插件配置的 allowedRoots 合并），如 [\"/home/user/workspace\"]",
         },
       },
       output: {
@@ -586,6 +626,11 @@ export async function apply(
         outputPath: {
           type: "string",
           description: "输出文件路径，默认在原文件名后加 .relayout",
+        },
+        allowedRoots: {
+          type: "array",
+          items: { type: "string" },
+          description: "可选：本次调用额外放行的绝对路径根目录（与插件配置的 allowedRoots 合并）",
         },
       },
       output: {
@@ -637,7 +682,6 @@ export async function apply(
               },
               blocks: {
                 type: "array",
-                required: true,
                 items: {
                   type: "object",
                   additionalProperties: false,
@@ -650,6 +694,11 @@ export async function apply(
                     s: { type: "string", required: true },
                   },
                 },
+                description: "结构化块（t: h2 小节标题 / p 段落 / b 要点 / b2 子要点 / eq 公式框 / gap 间距）",
+              },
+              markdown: {
+                type: "string",
+                description: "便捷写法：markdown 文本（# 标题 / - 要点 / 缩进子要点 / eq: 公式 / --- 分隔），内部自动解析，与 blocks 合并；两者至少提供一个",
               },
             },
           },
@@ -657,6 +706,11 @@ export async function apply(
         outputPath: {
           type: "string",
           description: "输出文件路径，默认在原文件名后加 .inserted",
+        },
+        allowedRoots: {
+          type: "array",
+          items: { type: "string" },
+          description: "可选：本次调用额外放行的绝对路径根目录（与插件配置的 allowedRoots 合并）",
         },
       },
       output: {
