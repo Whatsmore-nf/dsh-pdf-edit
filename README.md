@@ -22,6 +22,7 @@ DeepSeek Harness 插件 —— AI 修改 PDF 文字，自动保持原版式不�
 | **错别字修正** | 让 AI 扫一遍，自动修正拼写和语法错误 |
 | **合同/报告批量修改** | 多页文档统一替换人名、金额、日期等 |
 | **格式转换** | 把散乱的 PDF 重新排版成学术论文双栏、手机阅读单栏、商务简报等版式 |
+| **往 PDF 里补内容** | 把 md/笔记作为新页插到指定页之后（`pdf-edit-insert`，无需 LLM）：自动排版横幅标题/正文/公式框、跨页断页、化学式上下标缺字自动回退 |
 
 ## 安装
 
@@ -33,7 +34,7 @@ dsh plugin --profile web add dsh-pdf-edit@latest
 npm install dsh-pdf-edit
 ```
 
-> 当前版本：`v0.2.2`（2026-08-23 发布）。主要更新：README 增加 AI Agent 操作手册、`removeSubheadings()` 完整实现、关键编程方法（`getExtract` / `drawPatchedPages` / `openNativeDoc`）公开为公共接口。
+> 当前版本：`v0.3.0`（2026-08-23 发布）。主要更新：新增「插入内容」能力（工具 `pdf-edit-insert` + 编程接口 `insertPages` / `parseMarkdownBlocks`，无需 LLM）、`FontResolver` 字形覆盖查询与回退链（`resolveRuns` / `hasGlyph` / `fonts.fallbacks`）、系统 CJK 字体候选补充、CFF 回退字体全文嵌入修复。
 
 ### 遇到 "Cannot read properties of undefined (reading 'prepare')"？
 
@@ -120,14 +121,59 @@ const { outputPath, deletedTids } = await removeSubheadings(
 );
 ```
 
+### 插入内容（v0.3.0 新增：pdf-edit-insert / insertPages）
+
+原四个工具只支持“原位改字”，无法在文档里加内容。v0.3.0 补齐这条链路：把结构化内容（标题 + 文本块）作为**新页**插到原 PDF 指定页之后，自动排版（灰底横幅标题 / 正文 / 公式灰底框 / 跨页断页 / 页脚），**原页零改动**，且**无需 LLM**（不依赖 `chatFn` / API Key）。
+
+工具调用：
+
+```
+pdf-edit-insert
+  pdfPath: "doc.pdf"
+  insertions: [
+    { afterPage: 14, title: "补充一：电解质判别", caption: "模块二｜插入位置：第 14 页后",
+      blocks: [
+        { t: "p",  s: "判断电解质只看自身能否电离……" },
+        { t: "b",  s: "CO₂ 自身不能电离，是非电解质" },
+        { t: "eq", s: "2HCO₃⁻ + Ca²⁺ + 2OH⁻ = CaCO₃↓ + CO₃²⁻ + 2H₂O" },
+        { t: "h2", s: "小节标题" },
+      ] }
+  ]
+```
+
+块类型 `t`：`p` 段落 / `b` 要点（悬挂缩进）/ `b2` 子要点 / `h2` 小节标题（加粗）/ `eq` 公式（灰底框）/ `gap` 间距。同 `afterPage` 的插入自动合并为一组；内容超长自动跨页（续页带“（续）”标记）。
+
+编程接口（`src/inserter.ts`）：
+
+```js
+const { insertPages, parseMarkdownBlocks } = require('dsh-pdf-edit');
+const { bytes, insertedPages, totalPages } = await insertPages(
+  new Uint8Array(require('fs').readFileSync('doc.pdf')),
+  [{ afterPage: 14, title: '补充一', caption: '插入位置', blocks: parseMarkdownBlocks(mdText) }],
+  {
+    family: 'regular', titleFamily: 'bold',
+    fonts: {
+      customs: [{ family: 'regular', path: '/fonts/NotoSansCJKsc-Regular.otf' },
+                { family: 'bold',    path: '/fonts/NotoSansCJKsc-Bold.otf' }],
+      cjk: { path: '/fonts/NotoSansCJKsc-Regular.otf' },
+      fallbacks: [{ family: 'freesans', path: '/usr/share/fonts/gnu-free/FreeSans.otf' }],
+      fakeBold: false,
+    },
+    footerText: (n) => `补充页 · 插于原第 ${n} 页之后`,
+  },
+);
+```
+
+**化学式上下标缺字回退**：Noto/思源等常见 CJK 字体 cmap 里没有 `₂₃⁺⁻`（U+2080-209F）等字形——这就是很多 PDF 里 `Na₂O₂` 显示为空白的根源。配置 `fonts.fallbacks`（如 FreeSans，含完整上下标）后，`FontResolver` 会自动把缺字字符拆到回退字体混排渲染（`resolveRuns` / `hasGlyph`）。回退字体**不做子集化**（pdf-lib 对部分 CFF 如 FreeSans 子集化后字形整段空白，已实测修复）。
+
 ### 依赖说明
 
 - 核心：`pdf-lib`（PDF 操作）+ `pdfjs-dist`（文本提取）
 - 原生绘制：`fontkit`（字体嵌入与测量）
 - 浏览器模式：`puppeteer-core`（需 `browserExecutablePath` 指向系统 Chrome/Edge）
-- 中文字体：自动探测 `simhei.ttf` / `msyh.ttc` / `NotoSansCJK-Regular.ttc`，或通过 `fonts.cjk` 配置
+- 中文字体：自动探测 `simhei.ttf` / `msyh.ttc` / `wqy-microhei.ttc` / `wqy-zenhei.ttc` / `NotoSansCJK-Regular.ttc`，或通过 `fonts.cjk` 配置
 
-> ⚠️ **注意**：工具接口（`pdf-edit-document`、`pdf-edit-preview`、`pdf-edit-page`、`pdf-edit-relayout`）封装了完整流程，但受限于 `allowedRoots`、`sanitizeText`、`chatFn` 依赖；编程接口更灵活但需要自己处理 `openNativeDoc`、`drawPatchedPages`、`doc.save()`。如果你的目标包含“删除文字”，请直接走编程接口操作 `Unit` 对象，而非依赖标准 `editDocument` 流程。
+> ⚠️ **注意**：工具接口（`pdf-edit-document`、`pdf-edit-preview`、`pdf-edit-page`、`pdf-edit-relayout`）封装了完整流程，但受限于 `allowedRoots`、`sanitizeText`、`chatFn` 依赖；编程接口更灵活但需要自己处理 `openNativeDoc`、`drawPatchedPages`、`doc.save()`。如果你的目标包含“删除文字”，请直接走编程接口操作 `Unit` 对象，而非依赖标准 `editDocument` 流程。**`pdf-edit-insert` 无 LLM / sanitizeText 限制**，可直接在工具层使用。
 
 ### AI 选哪个接口？（快速决策表）
 
@@ -137,6 +183,8 @@ const { outputPath, deletedTids } = await removeSubheadings(
 | 预览可编辑单元 | 工具 `pdf-edit-preview` 或编程 `previewPage()` | `previewPage(n)` | 无 |
 | **删除文字**（设空） | **编程接口** `removeSubheadings()` 或手动操作 | `getExtract` → `unit.text=''` → `drawPatchedPages` | `sanitizeText` 拒收空字符串；`editDocument` 会回填 |
 | 版式重排 | 工具 `pdf-edit-relayout` 或编程 `relayout()` | `relayout('academic'\|'mobile'\|'briefing')` | 无 |
+| **往 PDF 里补内容** | 工具 `pdf-edit-insert` 或编程 `insertPages()` | `insertPages(bytes, insertions, opts)` / `parseMarkdownBlocks()` | 无 LLM 依赖；回退字体不做子集化 |
+| 化学式上下标混排 | 编程接口 | `resolver.resolveRuns(text, family, bold, italic)` / `resolver.hasGlyph(...)` | 需配置 `fonts.fallbacks` |
 | 自定义字体 / 颜色修复 | 编程接口 + 配置 `fonts` | `StyleLockedEditor.open(pdf, chat, { fonts })` | 工具接口不暴露字体配置细节 |
 
 > 💡 **路径解析提示**：若 `pdfPath` 解析到 `/home/wang/Desktop` 而非预期目录，说明 `process.cwd()` 与实际文件位置不匹配。编程调用时显式传入绝对路径：`const pdfPath = require('path').resolve('Document.pdf');`，并在 `allowedRoots` 中包含该路径的真实父目录（如 `['/workspace']` 或 `['/home/wang/dsh-pdf-edit']`）。
@@ -144,6 +192,14 @@ const { outputPath, deletedTids } = await removeSubheadings(
 ---
 
 ## 更新记录
+
+### v0.3.0
+
+- **新增「插入内容」能力**：工具 `pdf-edit-insert` + 编程接口 `insertPages()` / `parseMarkdownBlocks()`（`src/inserter.ts`）——把结构化内容作为新页插到指定页之后，自动排版（横幅/正文/公式框/跨页断页/页脚），原页零改动，无需 LLM
+- **FontResolver 字形覆盖与回退链**：新增 `resolveRuns()` / `hasGlyph()` 与 `fonts.fallbacks` 配置——化学式上下标（₂₃⁺⁻ 等，Noto CJK cmap 缺失）自动拆到回退字体混排渲染
+- **修复**：回退字体不做 pdf-lib 子集化（实测 FreeSans 等 CFF 字体子集化后字形整段空白）
+- 系统 CJK 字体自动探测补充 `wqy-zenhei.ttc`、`noto-cjk` 等 Linux 路径
+- 测试新增 8 例（inserter 集成 + fonts-fallback 单测），全套 133 例通过
 
 ### v0.2.2
 

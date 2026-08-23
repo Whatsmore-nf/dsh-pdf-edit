@@ -12,6 +12,7 @@ import { readFileSync, writeFileSync } from "node:fs";
 
 import { StyleLockedEditor } from "./pipeline.js";
 import { createDeepSeekChatFn, adapterToChatFn } from "./ai-editor.js";
+import type { InsertBlockType } from "./inserter.js";
 import {
   validateInputPath,
   validateOutputPath,
@@ -50,6 +51,7 @@ export * from "./flow-themes.js";
 export * from "./layout-flow.js";
 export * from "./flow.js";
 export * from "./pipeline.js";
+export * from "./inserter.js";
 
 /* ------------------------------------------------------------------ */
 /* 配置                                                                */
@@ -258,6 +260,54 @@ async function pdfEditPreview(params: {
   } finally {
     await editor.close();
   }
+}
+
+/* -------------------------- pdf-edit-insert ------------------------- */
+/* 无需 LLM：把结构化内容作为新页插入指定页之后（见 src/inserter.ts）    */
+
+async function pdfEditInsert(params: {
+  pdfPath: string;
+  insertions: Array<{
+    afterPage: number;
+    title: string;
+    caption?: string;
+    blocks: Array<{ t: string; s: string }>;
+  }>;
+  outputPath?: string;
+}): Promise<{
+  outputPath: string;
+  insertedPages: number;
+  totalPages: number;
+}> {
+  const inputAbs = validateInputPath(params.pdfPath, guardOpts());
+  const outputAbs = validateOutputPath(
+    params.outputPath,
+    inputAbs,
+    guardOpts(),
+    ".inserted.pdf",
+  );
+  const original = new Uint8Array(readFileSync(inputAbs));
+
+  const { insertPages } = await import("./inserter.js");
+  const result = await insertPages(
+    original,
+    params.insertions.map((ins) => ({
+      afterPage: ins.afterPage,
+      title: ins.title,
+      caption: ins.caption,
+      blocks: ins.blocks.map((b) => ({
+        t: b.t as InsertBlockType,
+        s: b.s,
+      })),
+    })),
+    { fonts: _config.fonts },
+  );
+  writeFileSync(outputAbs, result.bytes);
+  return {
+    outputPath: outputAbs,
+    insertedPages: result.insertedPages,
+    totalPages: result.totalPages,
+  };
 }
 
 /* ------------------------------------------------------------------ */
@@ -549,6 +599,79 @@ export async function apply(
         render: jsonRender,
       },
       execute: (args) => pdfEditRelayout(args),
+    }),
+  );
+
+  /* -------------------------- pdf-edit-insert -------------------------- */
+  ctx.tools.register(
+    defineTool({
+      name: "pdf-edit-insert",
+      description:
+        "把结构化补充内容（标题 + 文本块）作为新页插入 PDF 指定页之后：自动排版（标题横幅/正文/公式灰底框/跨页断页/页脚），原页零改动。无需 LLM。文本块类型：p 段落 / b 要点 / b2 子要点 / h2 小节标题 / eq 公式框 / gap 间距。",
+      parameters: {
+        pdfPath: {
+          type: "string",
+          required: true,
+          description: "PDF 文件路径（必须位于 allowedRoots 白名单内）",
+        },
+        insertions: {
+          type: "array",
+          required: true,
+          items: {
+            type: "object",
+            additionalProperties: false,
+            properties: {
+              afterPage: {
+                type: "integer",
+                required: true,
+                description: "插到原 PDF 该页（1-based）之后",
+              },
+              title: {
+                type: "string",
+                required: true,
+                description: "横幅标题（加粗）",
+              },
+              caption: {
+                type: "string",
+                description: "横幅上方的灰色说明行（如插入位置）",
+              },
+              blocks: {
+                type: "array",
+                required: true,
+                items: {
+                  type: "object",
+                  additionalProperties: false,
+                  properties: {
+                    t: {
+                      type: "string",
+                      required: true,
+                      enum: ["h2", "p", "b", "b2", "eq", "gap"],
+                    },
+                    s: { type: "string", required: true },
+                  },
+                },
+              },
+            },
+          },
+        },
+        outputPath: {
+          type: "string",
+          description: "输出文件路径，默认在原文件名后加 .inserted",
+        },
+      },
+      output: {
+        schema: {
+          type: "object",
+          additionalProperties: false,
+          properties: {
+            outputPath: { type: "string", required: true },
+            insertedPages: { type: "integer", required: true },
+            totalPages: { type: "integer", required: true },
+          },
+        },
+        render: jsonRender,
+      },
+      execute: (args) => pdfEditInsert(args),
     }),
   );
 }
