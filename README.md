@@ -40,7 +40,7 @@ dsh plugin --profile web add dsh-pdf-edit@latest
 npm install dsh-pdf-edit
 ```
 
-> 当前版本：`v0.4.1`（2026-08-25 发布）。主要更新：修复 std 生态下 `pdf-edit-insert` 的字体/加粗/编码问题（标准字体 WinAnsi 崩溃、`family` 未从 customs 派生导致标题双绘与缺字、preview 免 LLM）。v0.4.0：适配 dsh-std Community v0.15 生态（`dsh-plugin.json` 静态清单 + FacetModule 入口，解除官方包硬依赖）。
+> 当前版本：`v0.4.2`（2026-08-25 发布）。主要更新：修复 `pdf-edit-page/document` 在 LLM 返回「顶层数组 + 尾部说明文字」时 JSON 解析失败（候选式容错解析：原样/花括号/方括号截取，只接受带 items 的候选）。v0.4.1：std 生态 insert 字体/加粗/编码修复、preview 免 LLM。v0.4.0：适配 dsh-std Community v0.15 生态。
 
 ## dsh-std 标准生态适配（v0.4.0 新增）
 
@@ -237,6 +237,11 @@ const { bytes, insertedPages, totalPages } = await insertPages(
 ---
 
 ## 更新记录
+
+### v0.4.2
+
+- **修复 AI 精修（`pdf-edit-page` / `pdf-edit-document`）在 LLM 返回「顶层 JSON 数组 + 尾部说明文字」时的解析失败**（`Unexpected non-whitespace character after JSON`）：`parsePatchObject` 改为候选式容错解析——原样 / 花括号截取 / 方括号截取依次尝试，且只接受带 `items` 的候选（避免误吞数组内单对象）
+- 新增 2 条回归测试（数组+尾注、对象+尾注含花括号），全套 148 例通过
 
 ### v0.4.1
 

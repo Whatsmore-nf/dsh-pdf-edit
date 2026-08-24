@@ -34,6 +34,18 @@ describe("ai-editor/parsePatchObject", () => {
     const m = parsePatchObject(`{"items":[{"tid":"a","text":"x"},]}`);
     expect(m.get("a")).toBe("x");
   });
+  it("顶层数组 + 尾部说明文字也能解析（线上故障回归）", () => {
+    const m = parsePatchObject(
+      '[{"tid":"a","text":"x"}] 以上是修改结果，共 1 条。',
+    );
+    expect(m.get("a")).toBe("x");
+  });
+  it("对象 + 尾部含花括号的说明文字也能解析", () => {
+    const m = parsePatchObject(
+      '好的：{"items":[{"tid":"a","text":"x"}]} 说明：详见 {p14-46}。',
+    );
+    expect(m.get("a")).toBe("x");
+  });
   it("顶层 JSON 数组也接受", () => {
     const m = parsePatchObject(`[{"tid":"a","text":"y"}]`);
     expect(m.get("a")).toBe("y");

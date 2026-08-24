@@ -182,24 +182,38 @@ export function parsePatchObject(raw: string): Map<string, string> {
 
   let s = raw.trim().replace(FENCE_START, "").replace(FENCE_END, "");
 
-  // 仅对对象形式做花括号截取；顶层数组（以 [ 开头）必须保留完整结构
-  if (!s.startsWith("[")) {
-    const l = s.indexOf("{");
-    const r = s.lastIndexOf("}");
-    if (l >= 0 && r > l) s = s.slice(l, r + 1);
-  }
+  // 容错候选：模型常会在 JSON 前后附带说明文字。
+  //  1) 原样（完整对象 / 顶层数组）
+  //  2) 花括号截取（对象 + 前后说明）
+  //  3) 方括号截取（顶层数组 + 尾部说明，如"已修改 N 条"）
+  const candidates: string[] = [s];
+  const lb = s.indexOf("{");
+  const rb = s.lastIndexOf("}");
+  if (lb >= 0 && rb > lb) candidates.push(s.slice(lb, rb + 1));
+  const la = s.indexOf("[");
+  const ra = s.lastIndexOf("]");
+  if (la >= 0 && ra > la) candidates.push(s.slice(la, ra + 1));
 
   let obj: any;
-
-  try {
-    obj = JSON.parse(s);
-  } catch (firstError) {
-    try {
-      obj = JSON.parse(s.replace(/,\s*([}\]])/g, "$1"));
-    } catch {
-      throw firstError;
+  let lastErr: unknown;
+  for (const cand of [...new Set(candidates)]) {
+    for (const text of [cand, cand.replace(/,\s*([}\]])/g, "$1")]) {
+      try {
+        const parsed = JSON.parse(text);
+        // 只接受能提供 items 的候选；否则（如数组内单个对象被花括号截取出来）
+        // 继续尝试下一个候选，避免误吞。
+        if (Array.isArray(parsed) || Array.isArray(parsed?.items)) {
+          obj = parsed;
+          break;
+        }
+        lastErr = new Error("AI 输出缺少 items 数组");
+      } catch (e) {
+        lastErr = e;
+      }
     }
+    if (obj !== undefined) break;
   }
+  if (obj === undefined) throw lastErr;
 
   const items = Array.isArray(obj) ? obj : obj?.items;
 
