@@ -255,10 +255,10 @@ export async function pdfEditPreview(params: {
   pageCount: number;
 }> {
   const inputAbs = validateInputPath(params.pdfPath, guardOpts(params.allowedRoots));
-  const chat = getChatFn();
   const original = new Uint8Array(readFileSync(inputAbs));
 
-  const editor = await StyleLockedEditor.open(original, chat, {
+  // preview 只读，不需要 LLM：传 no-op chat（previewPage 不调用 chatFn）
+  const editor = await StyleLockedEditor.open(original, async () => "", {
     recoverColor: _config.recoverColor,
     strictColor: _config.strictColor,
     renderMode: _config.renderMode,
@@ -276,6 +276,26 @@ export async function pdfEditPreview(params: {
 
 /* -------------------------- pdf-edit-insert ------------------------- */
 /* 无需 LLM：把结构化内容作为新页插入指定页之后（见 src/inserter.ts）    */
+
+export /**
+ * pdf-edit-insert 的排版配置：从 fonts.customs 自动派生 family/titleFamily。
+ * - customs 第 1 项 → 正文字体族；第 2 项（若有）→ 标题字体族；
+ * - 提供独立标题字体时自动关闭 fakeBold（真实加粗字体无需双绘，也避免提取重复）。
+ */
+function insertEditorOptions() {
+  const customs = _config.fonts?.customs ?? [];
+  const family = customs[0]?.family;
+  const titleFamily = customs[1]?.family ?? customs[0]?.family;
+  const fonts =
+    customs.length >= 2
+      ? { ..._config.fonts, fakeBold: false }
+      : _config.fonts;
+  return {
+    fonts,
+    ...(family ? { family } : {}),
+    ...(titleFamily ? { titleFamily } : {}),
+  };
+}
 
 export async function pdfEditInsert(params: {
   pdfPath: string;
@@ -327,7 +347,7 @@ export async function pdfEditInsert(params: {
         blocks,
       };
     }),
-    { fonts: _config.fonts },
+    insertEditorOptions(),
   );
   writeFileSync(outputAbs, result.bytes);
   return {

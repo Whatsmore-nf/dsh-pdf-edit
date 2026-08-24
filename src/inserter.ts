@@ -10,7 +10,7 @@
  */
 import { PDFDocument, rgb, grayscale } from "pdf-lib";
 import type { PDFPage } from "pdf-lib";
-import { FontResolver } from "./fonts-resolver.js";
+import { FontResolver, toWinAnsiSafe } from "./fonts-resolver.js";
 import type { FontConfig } from "./fonts-resolver.js";
 
 /* ------------------------------------------------------------------ */
@@ -294,10 +294,13 @@ async function drawLine(
   let cx = x;
   for (const r of runs) {
     if (r.covered) {
-      page.drawText(r.text, { x: cx, y, size, font: r.rf.font, color });
+      // 标准字体（WinAnsi）必须先清洗再绘制：pdf-lib 对未编码字符（如 − — “ ”）
+      // 直接抛 WinAnsi 异常，native-renderer 也是先过 toWinAnsiSafe。
+      const t = r.rf.standard ? toWinAnsiSafe(r.text) : r.text;
+      page.drawText(t, { x: cx, y, size, font: r.rf.font, color });
       if (r.rf.fakeBold) {
         // 与 native-renderer 一致的 fakeBold：偏移重绘模拟加粗
-        page.drawText(r.text, {
+        page.drawText(t, {
           x: cx + Math.max(0.2, size * 0.02),
           y,
           size,

@@ -20,6 +20,11 @@
  *   DSH_PDF_EDIT_PATCH_COLOR
  *   DSH_PDF_EDIT_STRICT_TIDS / _MISSING_TIDS_USE_ORIGINAL / _RECOVER_COLOR / _STRICT_COLOR
  *   DSH_PDF_EDIT_OVERFLOW_MODE / _MIN_FONT_SIZE_PT
+ *   DSH_PDF_EDIT_FONTS_CJK        中文字体路径（如 NotoSansCJKsc-Regular.otf）
+ *   DSH_PDF_EDIT_FONTS_CUSTOMS    主字体，格式 family=path;family=path（可含加粗）
+ *   DSH_PDF_EDIT_FONTS_FALLBACKS  缺字回退字体，同上（如 freesans=/usr/share/fonts/gnu-free/FreeSans.otf，
+ *                                 用于 ₂₃⁺⁻ 等 CJK 字体缺失的上下标）
+ *   DSH_PDF_EDIT_FAKE_BOLD        0/1 是否用双绘模拟加粗（配置了独立加粗字体时置 0）
  */
 import { delimiter } from "node:path";
 
@@ -390,6 +395,9 @@ export function envConfig(): Partial<
   if (concurrency !== undefined) config.browserConcurrency = concurrency;
   if (env.DSH_PDF_EDIT_PATCH_COLOR?.trim()) config.patchColor = env.DSH_PDF_EDIT_PATCH_COLOR.trim();
 
+  const fakeBold = envBool(env.DSH_PDF_EDIT_FAKE_BOLD);
+  if (fakeBold !== undefined) config.fakeBold = fakeBold;
+
   const strictTids = envBool(env.DSH_PDF_EDIT_STRICT_TIDS);
   if (strictTids !== undefined) config.strictTids = strictTids;
   const missingOriginal = envBool(env.DSH_PDF_EDIT_MISSING_TIDS_USE_ORIGINAL);
@@ -412,6 +420,38 @@ export function envConfig(): Partial<
       ...(minFontSizePt !== undefined ? { minFontSizePt } : {}),
     };
   }
+
+  // 字体配置（std 宿主没有 cordis config 注入，改为环境变量）。
+  // 格式：family=path;family=path（family 与 index.ts 的 FontResolver 一致）。
+  const parseFontPairs = (
+    value: string | undefined,
+  ): Array<{ family: string; path: string }> => {
+    if (value === undefined) return [];
+    return value
+      .split(";")
+      .map((pair) => pair.trim())
+      .filter((pair) => pair.length > 0)
+      .map((pair) => {
+        const eq = pair.indexOf("=");
+        if (eq <= 0) {
+          throw new Error(
+            `DSH_PDF_EDIT_FONTS_* 格式应为 "family=path;family=path"，收到: ${pair}`,
+          );
+        }
+        return {
+          family: pair.slice(0, eq).trim(),
+          path: pair.slice(eq + 1).trim(),
+        };
+      });
+  };
+  const fonts: Record<string, unknown> = {};
+  const cjkPath = env.DSH_PDF_EDIT_FONTS_CJK?.trim();
+  if (cjkPath) fonts.cjk = { path: cjkPath };
+  const customs = parseFontPairs(env.DSH_PDF_EDIT_FONTS_CUSTOMS);
+  if (customs.length) fonts.customs = customs;
+  const fallbacks = parseFontPairs(env.DSH_PDF_EDIT_FONTS_FALLBACKS);
+  if (fallbacks.length) fonts.fallbacks = fallbacks;
+  if (Object.keys(fonts).length > 0) config.fonts = fonts;
 
   return config;
 }
