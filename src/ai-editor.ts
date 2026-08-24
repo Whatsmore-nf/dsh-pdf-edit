@@ -175,6 +175,28 @@ const MAX_TEXT_LEN = 8192;
 /** 条目数上限 */
 const MAX_ITEMS = 10_000;
 
+/**
+ * 尽力解析 JSON：完整值后跟任意垃圾文本也能解析出来。
+ * 依赖 V8 的报错语义："Unexpected non-whitespace character after JSON at position N"
+ * 表示 N 处正好是一个完整 JSON 值结束的位置 → 截断到 N 再试。
+ */
+function tryParseJsonLenient(text: string): any {
+  let cur = text;
+  for (let attempt = 0; attempt < 8; attempt++) {
+    try {
+      return JSON.parse(cur);
+    } catch (e) {
+      const m = /position (\d+)/i.exec(String((e as Error)?.message ?? ""));
+      if (!m) return undefined;
+      const pos = Number(m[1]);
+      if (pos <= 0 || pos >= cur.length) return undefined;
+      cur = cur.slice(0, pos).trimEnd();
+      // 截断后若只剩半个结构（如 "{...}" 截成 "{"），下一轮解析失败即返回
+    }
+  }
+  return undefined;
+}
+
 export function parsePatchObject(raw: string): Map<string, string> {
   if (raw.length > MAX_RAW_OUTPUT_CHARS) {
     throw new Error(`AI 输出超过 ${MAX_RAW_OUTPUT_CHARS} 字符，疑似异常响应`);
@@ -182,10 +204,12 @@ export function parsePatchObject(raw: string): Map<string, string> {
 
   let s = raw.trim().replace(FENCE_START, "").replace(FENCE_END, "");
 
-  // 容错候选：模型常会在 JSON 前后附带说明文字。
+  // 容错候选：模型常会在 JSON 前后附带说明文字（说明里还可能含花括号/方括号，
+  // 因此不能只靠 lastIndexOf 截取）。
   //  1) 原样（完整对象 / 顶层数组）
   //  2) 花括号截取（对象 + 前后说明）
   //  3) 方括号截取（顶层数组 + 尾部说明，如"已修改 N 条"）
+  //  4) 按 JSON 解析错误位置截断（"position N" 即完整 JSON 值结束点，去掉尾部垃圾）
   const candidates: string[] = [s];
   const lb = s.indexOf("{");
   const rb = s.lastIndexOf("}");
@@ -198,18 +222,18 @@ export function parsePatchObject(raw: string): Map<string, string> {
   let lastErr: unknown;
   for (const cand of [...new Set(candidates)]) {
     for (const text of [cand, cand.replace(/,\s*([}\]])/g, "$1")]) {
-      try {
-        const parsed = JSON.parse(text);
-        // 只接受能提供 items 的候选；否则（如数组内单个对象被花括号截取出来）
-        // 继续尝试下一个候选，避免误吞。
-        if (Array.isArray(parsed) || Array.isArray(parsed?.items)) {
-          obj = parsed;
-          break;
-        }
-        lastErr = new Error("AI 输出缺少 items 数组");
-      } catch (e) {
-        lastErr = e;
+      const parsed = tryParseJsonLenient(text);
+      if (parsed === undefined) {
+        lastErr = lastErr ?? new Error("AI 输出不是合法 JSON");
+        continue;
       }
+      // 只接受能提供 items 的候选；否则（如数组内单个对象被花括号截取出来）
+      // 继续尝试下一个候选，避免误吞。
+      if (Array.isArray(parsed) || Array.isArray(parsed?.items)) {
+        obj = parsed;
+        break;
+      }
+      lastErr = new Error("AI 输出缺少 items 数组");
     }
     if (obj !== undefined) break;
   }

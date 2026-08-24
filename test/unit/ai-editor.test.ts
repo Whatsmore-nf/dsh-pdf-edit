@@ -40,6 +40,18 @@ describe("ai-editor/parsePatchObject", () => {
     );
     expect(m.get("a")).toBe("x");
   });
+  it("尾部说明里含花括号/方括号也能解析（lastIndexOf 截取会失败的场景）", () => {
+    const m = parsePatchObject(
+      '{"items":[{"tid":"a","text":"x"}]}\n已修改，详见 {第14页} 与 [附录A]。',
+    );
+    expect(m.get("a")).toBe("x");
+  });
+  it("完整 JSON 后跟任意垃圾文本也能解析（position 截断）", () => {
+    const m = parsePatchObject(
+      '{"items":[{"tid":"a","text":"x"}]} 好的 done { } [ ] !!!',
+    );
+    expect(m.get("a")).toBe("x");
+  });
   it("对象 + 尾部含花括号的说明文字也能解析", () => {
     const m = parsePatchObject(
       '好的：{"items":[{"tid":"a","text":"x"}]} 说明：详见 {p14-46}。',

@@ -8,7 +8,7 @@
 
 > 🧩 **已接入 dsh-std 生态（Community v0.15）**：本插件随包提供 `dsh-plugin.json` 静态清单与标准 **FacetModule 入口**（`dist/std/host.js`），可被 `@dsh-std/adapter-dsh` 等 dsh-std 标准宿主直接装载，**不依赖任何 `@deepseek-ai/*` 官方包**；同时保留 cordis 直连入口。两条入口共用同一套工具实现，编辑行为完全一致。
 
-**版本：`v0.4.2`**（当前） | 需要 `Node >= 22`；兼容 `dsh >= 0.1.1-rc.2`（cordis 直连）与 dsh-std Community v0.15 宿主
+**版本：`v0.4.3`**（当前） | 需要 `Node >= 22`；兼容 `dsh >= 0.1.1-rc.2`（cordis 直连）与 dsh-std Community v0.15 宿主
 
 DeepSeek Harness 插件 —— AI 修改 PDF 文字，自动保持原版式不变。
 
@@ -40,7 +40,7 @@ dsh plugin --profile web add dsh-pdf-edit@latest
 npm install dsh-pdf-edit
 ```
 
-> 当前版本：`v0.4.2`（2026-08-25 发布）。主要更新：修复 `pdf-edit-page/document` 在 LLM 返回「顶层数组 + 尾部说明文字」时 JSON 解析失败（候选式容错解析：原样/花括号/方括号截取，只接受带 items 的候选）。v0.4.1：std 生态 insert 字体/加粗/编码修复、preview 免 LLM。v0.4.0：适配 dsh-std Community v0.15 生态。
+> 当前版本：`v0.4.3`（2026-08-25 发布）。主要更新：`parsePatchObject` 解析再加固——按 JSON 解析错误位置截断，彻底处理模型在 JSON 后附带的任意说明文字（含花括号/方括号的尾注也能解析）。v0.4.2：修复 LLM 返回数组+尾注时的解析失败。v0.4.1：std 生态 insert 字体/加粗/编码修复。v0.4.0：适配 dsh-std Community v0.15 生态。
 
 ## dsh-std 标准生态适配（v0.4.0 新增）
 
@@ -237,6 +237,11 @@ const { bytes, insertedPages, totalPages } = await insertPages(
 ---
 
 ## 更新记录
+
+### v0.4.3
+
+- **`parsePatchObject` 解析再加固**：新增「按 JSON 解析错误位置截断」（`tryParseJsonLenient`）——模型在 JSON 值后附带任意说明文字（包括含 `{}`/`[]` 的尾注）都能正确解析出 `items`
+- 新增 2 条回归测试（尾注含花括号/方括号、任意垃圾尾随），全套 150 例通过
 
 ### v0.4.2
 
