@@ -2,7 +2,7 @@
 
 > [English](./README.en.md) | 中文
 
-**版本：`v0.4.0`**（当前） | 需要 `Node >= 22`；兼容 `dsh >= 0.1.1-rc.2`（cordis 直连）与 dsh-std Community v0.15 宿主
+**版本：`v0.4.1`**（当前） | 需要 `Node >= 22`；兼容 `dsh >= 0.1.1-rc.2`（cordis 直连）与 dsh-std Community v0.15 宿主
 
 DeepSeek Harness 插件 —— AI 修改 PDF 文字，自动保持原版式不变。
 
@@ -34,7 +34,7 @@ dsh plugin --profile web add dsh-pdf-edit@latest
 npm install dsh-pdf-edit
 ```
 
-> 当前版本：`v0.4.0`（2026-08-24 发布）。主要更新：**适配 dsh-std Community v0.15 生态**——包根新增 `dsh-plugin.json` 静态清单与标准 FacetModule 入口（`dist/std/host.js`），经 `@dsh-std/adapter-dsh` 装载时不再依赖任何 `@deepseek-ai/*` 官方包，未来 dsh 上游破坏性变更由 adapter 层吸收，插件零改动；cordis 直连入口原样保留。v0.3.1：工具层路径白名单体验修复、`pdf-edit-insert` 支持 markdown 文本。
+> 当前版本：`v0.4.1`（2026-08-25 发布）。主要更新：修复 std 生态下 `pdf-edit-insert` 的字体/加粗/编码问题（标准字体 WinAnsi 崩溃、`family` 未从 customs 派生导致标题双绘与缺字、preview 免 LLM）。v0.4.0：适配 dsh-std Community v0.15 生态（`dsh-plugin.json` 静态清单 + FacetModule 入口，解除官方包硬依赖）。
 
 ## dsh-std 标准生态适配（v0.4.0 新增）
 
@@ -231,6 +231,13 @@ const { bytes, insertedPages, totalPages } = await insertPages(
 ---
 
 ## 更新记录
+
+### v0.4.1
+
+- **修复 std 生态下 insert 的标准字体 WinAnsi 崩溃**：`inserter.drawLine` 对标准字体（WinAnsi）run 绘制前先过 `toWinAnsiSafe`——`−`/`—`/`“”` 等字符不再抛 `WinAnsi cannot encode`（v0.3.0 潜在 bug，std 默认字体路径触发）
+- **`pdf-edit-insert` 自动派生字体族**：从 `fonts.customs` 自动取第 1 项为正文 `family`、第 2 项为 `titleFamily`；配置了独立加粗字体时自动 `fakeBold: false`，消除标题双绘导致的文本提取重复
+- **preview 免 LLM**：只读预览不再强制要求 LLM Key（传 no-op chat）
+- std 宿主新增 `DSH_PDF_EDIT_FAKE_BOLD` 环境变量；`DSH_PDF_EDIT_FONTS_CJK/_CUSTOMS/_FALLBACKS` 补齐（化学式上下标回退在 std 宿主可用）
 
 ### v0.4.0
 
