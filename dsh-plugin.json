@@ -1,0 +1,77 @@
+{
+  "$schema": "urn:dsh-std:community-draft:dsh-plugin:0.15",
+  "manifestVersion": "0.15",
+  "id": "io.github.whatsmore-nf.dsh-pdf-edit",
+  "name": "dsh-pdf-edit",
+  "version": "0.4.0",
+  "facets": {
+    "host": {
+      "entry": "dist/std/host.js",
+      "apiVersion": "v1alpha1"
+    }
+  },
+  "requires": {
+    "contracts": []
+  },
+  "permissions": [],
+  "contributes": {
+    "commands": [],
+    "x-tools": [
+      {
+        "apiVersion": "tools.dsh/v1alpha1",
+        "kind": "Tool",
+        "id": "io.github.whatsmore-nf.dsh-pdf-edit.preview",
+        "name": "pdf-edit-preview",
+        "spec": {
+          "title": "PDF 可编辑单元预览",
+          "description": "预览 PDF 某页的可编辑文本单元（tid + text），不做修改。编辑前先预览以获取 targetTids。"
+        }
+      },
+      {
+        "apiVersion": "tools.dsh/v1alpha1",
+        "kind": "Tool",
+        "id": "io.github.whatsmore-nf.dsh-pdf-edit.page",
+        "name": "pdf-edit-page",
+        "spec": {
+          "title": "PDF 单页 AI 精修",
+          "description": "对 PDF 单页进行 AI 文本精修（修正错别字、术语统一、措辞调整），样式锁定不变。"
+        }
+      },
+      {
+        "apiVersion": "tools.dsh/v1alpha1",
+        "kind": "Tool",
+        "id": "io.github.whatsmore-nf.dsh-pdf-edit.document",
+        "name": "pdf-edit-document",
+        "spec": {
+          "title": "PDF 全文 AI 批量精修",
+          "description": "对 PDF 全文进行 AI 批量精修（校对、术语统一、措辞调整），逐页样式锁定。"
+        }
+      },
+      {
+        "apiVersion": "tools.dsh/v1alpha1",
+        "kind": "Tool",
+        "id": "io.github.whatsmore-nf.dsh-pdf-edit.relayout",
+        "name": "pdf-edit-relayout",
+        "spec": {
+          "title": "PDF 版式重排",
+          "description": "对 PDF 进行版式重排，可选学术双栏（academic）、手机单栏（mobile）、商务简报（briefing）三种模板。"
+        }
+      },
+      {
+        "apiVersion": "tools.dsh/v1alpha1",
+        "kind": "Tool",
+        "id": "io.github.whatsmore-nf.dsh-pdf-edit.insert",
+        "name": "pdf-edit-insert",
+        "spec": {
+          "title": "PDF 插入内容页",
+          "description": "把结构化补充内容（标题 + 文本块）作为新页插入 PDF 指定页之后：自动排版，原页零改动。无需 LLM。"
+        }
+      }
+    ]
+  },
+  "subscriptions": [],
+  "license": "MIT",
+  "source": {
+    "repository": "https://github.com/Whatsmore-nf/dsh-pdf-edit.git"
+  }
+}

@@ -7,6 +7,8 @@
  *   apply(ctx, config) — 通过 ctx.tools.register(defineTool({...})) 注册工具
  *
  * 兼容导出：activate/deactivate/setChatFn 等编程接口保留，便于测试与嵌入调用。
+ * 标准生态入口见 src/std/host.ts（dsh-std Community v0.15 FacetModule），
+ * 两者共用同一批工具实现函数（pdfEditPreview / pdfEditPage / ...）。
  */
 import { readFileSync, writeFileSync } from "node:fs";
 
@@ -148,7 +150,7 @@ function editorOptions() {
 /* 工具执行体（供 defineTool 与编程调用共用）                            */
 /* ------------------------------------------------------------------ */
 
-async function pdfEditPage(params: {
+export async function pdfEditPage(params: {
   pdfPath: string;
   pageNumber: number;
   instruction: string;
@@ -182,7 +184,7 @@ async function pdfEditPage(params: {
   }
 }
 
-async function pdfEditDocument(params: {
+export async function pdfEditDocument(params: {
   pdfPath: string;
   instruction: string;
   outputPath?: string;
@@ -217,7 +219,7 @@ async function pdfEditDocument(params: {
   }
 }
 
-async function pdfEditRelayout(params: {
+export async function pdfEditRelayout(params: {
   pdfPath: string;
   templateId: "academic" | "mobile" | "briefing";
   outputPath?: string;
@@ -244,7 +246,7 @@ async function pdfEditRelayout(params: {
   }
 }
 
-async function pdfEditPreview(params: {
+export async function pdfEditPreview(params: {
   pdfPath: string;
   pageNumber: number;
   allowedRoots?: string[];
@@ -275,7 +277,7 @@ async function pdfEditPreview(params: {
 /* -------------------------- pdf-edit-insert ------------------------- */
 /* 无需 LLM：把结构化内容作为新页插入指定页之后（见 src/inserter.ts）    */
 
-async function pdfEditInsert(params: {
+export async function pdfEditInsert(params: {
   pdfPath: string;
   insertions: Array<{
     afterPage: number;
@@ -443,8 +445,19 @@ export async function apply(
     };
   }
 
-  // 延迟加载：本地开发环境未安装 dsh-tools 时模块本身仍可导入（供测试）
-  const { defineTool } = await import("@deepseek-ai/dsh-tools");
+  // 延迟加载：本地开发环境未安装 dsh-tools 时模块本身仍可导入（供测试）。
+  // std 宿主（dsh-plugin.json 入口）不经过本函数，因此不需要该包。
+  let defineTool: typeof import("@deepseek-ai/dsh-tools").defineTool;
+  try {
+    ({ defineTool } = await import("@deepseek-ai/dsh-tools"));
+  } catch (error) {
+    throw new Error(
+      "dsh-pdf-edit: cordis 直连模式需要 @deepseek-ai/dsh-tools。" +
+        "请通过 `dsh plugin --profile <profile> add dsh-pdf-edit` 安装（勿手动 pnpm install），" +
+        "或在支持 dsh-std Community v0.15 的宿主中经 dsh-plugin.json 装载本插件。",
+      { cause: error },
+    );
+  }
 
   const jsonRender = (_args: unknown, value: unknown) => [
     { type: "text" as const, text: JSON.stringify(value) },

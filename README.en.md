@@ -23,7 +23,7 @@ An AI-powered PDF editing plugin. Tell it what to change in natural language, an
 
 ## Install
 
-> Requires dsh `0.1.1-rc.2`; Node `>= 22`.
+> Node `>= 22`. Compatible with dsh `0.1.1-rc.2` (cordis-direct) and dsh-std Community v0.15 hosts.
 
 ```bash
 # Via Harness plugin CLI (same as official plugins)
@@ -31,7 +31,31 @@ dsh plugin --profile web add dsh-pdf-edit@latest
 
 # Or via npm
 npm install dsh-pdf-edit
+
+# Inside a dsh-std host (adapter scans profile dependencies for dsh-plugin.json)
+dsh plugin --profile web add @dsh-std/adapter-dsh
+dsh plugin --profile web add dsh-pdf-edit
 ```
+
+### dsh-std Ecosystem Adaptation (v0.4.0+)
+
+This plugin is also a **dsh-std Community v0.15** standard plugin: hosts read the static `dsh-plugin.json` at the package root to decide compatibility **without executing plugin code**, and all runtime traffic goes through an adapter layer — future upstream breaking changes are absorbed by the adapter, so this plugin stays maintenance-free.
+
+| Loading mode | Host | Entry | Extra deps |
+|---|---|---|---|
+| **dsh-std (recommended)** | std-capable hosts (e.g. via `@dsh-std/adapter-dsh`) | `dsh-plugin.json` → `facets.host.entry` (`dist/std/host.js`) | none — zero `@deepseek-ai/*` packages |
+| cordis-direct (legacy) | native DeepSeek Harness profiles | `cordis.patch.yml` + `apply(ctx, config)` | `@deepseek-ai/dsh-tools` (optional peerDep) |
+
+Under std hosts (no cordis config injection), configuration comes from environment variables:
+
+| Variable | Meaning |
+|---|---|
+| `DEEPSEEK_API_KEY` | LLM key; required for AI editing (preview/insert work without it). `DSH_PDF_EDIT_API_KEY` overrides |
+| `DSH_PDF_EDIT_ALLOWED_ROOTS` | Path whitelist, joined with the platform path delimiter (defaults to cwd) |
+| `DSH_PDF_EDIT_PROVIDER` / `_MODEL` / `_BASE_URL` | Model routing for direct API calls |
+| `DSH_PDF_EDIT_RENDER_MODE` | `native` (default) or `browser` |
+
+Note: the dsh-std tool/model protocols (v1alpha1) do not yet expose host LLM inference to plugins, so AI editing under std hosts uses direct DeepSeek API calls; tool registration, lifecycle, and cleanup semantics are fully standard.
 
 ### Seeing "Cannot read properties of undefined (reading 'prepare')"?
 
@@ -58,6 +82,13 @@ The plugin also probes for this at load time: if detected, it throws an error
 containing these exact recovery commands instead of crashing silently.
 
 ## Changelog
+
+### v0.4.0
+
+- **dsh-std Community v0.15 adaptation**: static `dsh-plugin.json` manifest at the package root + standard FacetModule entry (`src/std/host.ts` → `dist/std/host.js`). Under std hosts (e.g. `@dsh-std/adapter-dsh`), the 5 tools are published as `tools.dsh/v1alpha1 Tool` extensions with local `ToolHandler`s; lifecycle/cleanup follow the standard activation scope
+- **No hard dependency on official packages**: `@deepseek-ai/dsh-tools` peerDependency is now optional — zero `@deepseek-ai/*` dependencies under std hosts; future upstream breaking changes are absorbed by the adapter layer. The cordis-direct entry is preserved unchanged and reports clear guidance when the package is missing
+- std-host configuration switches to environment variables (`DSH_PDF_EDIT_*` / `DEEPSEEK_API_KEY`)
+- Tool parameter schemas upgraded to standard JSON Schema; tool implementations (`pdfEditPreview`, etc.) are exported for both entries to share
 
 ### v0.2.1
 

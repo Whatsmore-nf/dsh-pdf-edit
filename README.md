@@ -2,7 +2,7 @@
 
 > [English](./README.en.md) | 中文
 
-**版本：`v0.3.1`**（当前） | 需要 `dsh >= 0.1.1-rc.2` / `Node >= 22`
+**版本：`v0.4.0`**（当前） | 需要 `Node >= 22`；兼容 `dsh >= 0.1.1-rc.2`（cordis 直连）与 dsh-std Community v0.15 宿主
 
 DeepSeek Harness 插件 —— AI 修改 PDF 文字，自动保持原版式不变。
 
@@ -34,7 +34,46 @@ dsh plugin --profile web add dsh-pdf-edit@latest
 npm install dsh-pdf-edit
 ```
 
-> 当前版本：`v0.3.1`（2026-08-23 发布）。主要更新：工具层路径白名单体验修复（报错带出允许根目录、按调用传 allowedRoots）、`pdf-edit-insert` 支持 markdown 文本；v0.3.0 新增插入内容能力与字体回退链。
+> 当前版本：`v0.4.0`（2026-08-24 发布）。主要更新：**适配 dsh-std Community v0.15 生态**——包根新增 `dsh-plugin.json` 静态清单与标准 FacetModule 入口（`dist/std/host.js`），经 `@dsh-std/adapter-dsh` 装载时不再依赖任何 `@deepseek-ai/*` 官方包，未来 dsh 上游破坏性变更由 adapter 层吸收，插件零改动；cordis 直连入口原样保留。v0.3.1：工具层路径白名单体验修复、`pdf-edit-insert` 支持 markdown 文本。
+
+## dsh-std 标准生态适配（v0.4.0 新增）
+
+本插件同时是 **dsh-std Community v0.15** 标准插件（[dsh-std](https://github.com/Yan-Zero/dsh-std) / [dsh-ecosystem-spec](https://github.com/T-Auto/dsh-ecosystem-spec)）：宿主通过静态 `dsh-plugin.json` 在不执行插件代码的前提下完成兼容性判定，运行期经 adapter 层与 dsh 本体通信——上游接口变更被 adapter 单点吸收，插件免维护。
+
+### 两种装载方式
+
+| 方式 | 宿主 | 入口 | 依赖 |
+|---|---|---|---|
+| **标准生态（推荐）** | 支持 dsh-std 的宿主（如经 `@dsh-std/adapter-dsh` / dsh-TUI） | 包根 `dsh-plugin.json` → `facets.host.entry`（`dist/std/host.js`） | 无需任何 `@deepseek-ai/*` 包 |
+| cordis 直连（旧） | DeepSeek Harness 原生 profile | `cordis.patch.yml` + `apply(ctx, config)` | `@deepseek-ai/dsh-tools`（peerDep，现为 optional） |
+
+```bash
+# 标准生态宿主内安装（adapter 会扫描 profile 依赖中的 dsh-plugin.json）
+dsh plugin --profile web add @dsh-std/adapter-dsh
+dsh plugin --profile web add dsh-pdf-edit
+```
+
+### std 宿主下的配置（环境变量）
+
+std 协议没有 cordis config 注入，配置改从环境变量读取：
+
+| 环境变量 | 说明 |
+|---|---|
+| `DEEPSEEK_API_KEY` | LLM Key；AI 精修必需（预览/插入不需要）。也可用 `DSH_PDF_EDIT_API_KEY` 覆盖 |
+| `DSH_PDF_EDIT_ALLOWED_ROOTS` | 路径白名单，按平台路径分隔符拼接（默认当前工作目录） |
+| `DSH_PDF_EDIT_PROVIDER` / `_MODEL` / `_BASE_URL` | 模型路由（直连 API 时使用） |
+| `DSH_PDF_EDIT_RENDER_MODE` | `native`（默认）或 `browser` |
+| `DSH_PDF_EDIT_BROWSER_EXECUTABLE` / `_BROWSER_CONCURRENCY` | 浏览器模式选项 |
+| `DSH_PDF_EDIT_PATCH_COLOR` / `_STRICT_TIDS` / `_MISSING_TIDS_USE_ORIGINAL` / `_RECOVER_COLOR` / `_STRICT_COLOR` / `_OVERFLOW_MODE` / `_MIN_FONT_SIZE_PT` | 其余编辑行为开关 |
+
+> 说明：dsh-std `tool/model` 协议 v1alpha1 尚未向插件开放宿主 LLM 推理通道，因此 std 宿主下 AI 精修暂走 DeepSeek API 直连（Key 必填）；工具注册、生命周期、清理语义全部走标准协议。
+
+### 清单要点
+
+- `$schema: urn:dsh-std:community-draft:dsh-plugin:0.15`，`manifestVersion: 0.15`
+- 组件 ID：`io.github.whatsmore-nf.dsh-pdf-edit`
+- 5 个工具以 `contributes["x-tools"]` 声明为 `tools.dsh/v1alpha1 Tool` 扩展，activation 时逐一发布本地 `ToolHandler`
+- 不声明任何 required 契约与权限 → 与任意 std 宿主协商即兼容
 
 ### 遇到 "Cannot read properties of undefined (reading 'prepare')"？
 
@@ -192,6 +231,14 @@ const { bytes, insertedPages, totalPages } = await insertPages(
 ---
 
 ## 更新记录
+
+### v0.4.0
+
+- **适配 dsh-std Community v0.15 生态**：包根新增静态清单 `dsh-plugin.json`（`manifestVersion: 0.15`），新增标准 FacetModule 入口 `src/std/host.ts`（编译为 `dist/std/host.js`）——经 `@dsh-std/adapter-dsh` 等标准宿主装载时把 5 个工具发布为 `tools.dsh/v1alpha1 Tool` 扩展 + 本地 `ToolHandler`，生命周期/清理走标准 activation scope
+- **解除官方包硬依赖**：`@deepseek-ai/dsh-tools` peerDependency 改为 optional——标准宿主下插件零 `@deepseek-ai/*` 依赖，未来 dsh 上游破坏性变更由 adapter 层单点吸收；cordis 直连入口原样保留并在缺包时报错带指引
+- std 宿主配置改用环境变量（`DSH_PDF_EDIT_*` / `DEEPSEEK_API_KEY`），见 README「dsh-std 标准生态适配」章节
+- 工具参数 schema 升级为标准 JSON Schema（顶层 `required` 数组）；工具实现函数（`pdfEditPreview` 等）公开导出供两种入口复用
+- 新增集成测试 `test/integration/std-facet.test.ts`（9 例：manifest 一致性、handler 发布契约、端到端执行、越界拦截、重复激活恢复），全套 146 例通过
 
 ### v0.3.1
 
