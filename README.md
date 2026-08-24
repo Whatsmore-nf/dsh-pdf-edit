@@ -2,6 +2,12 @@
 
 > [English](./README.en.md) | 中文
 
+[![npm version](https://img.shields.io/npm/v/dsh-pdf-edit?color=blue&label=npm)](https://www.npmjs.com/package/dsh-pdf-edit)
+[![dsh-std Community v0.15](https://img.shields.io/badge/dsh--std-Community%20v0.15-6a4cff)](https://github.com/Whatsmore-nf/dsh-pdf-edit/blob/main/dsh-plugin.json)
+[![License: MIT](https://img.shields.io/badge/license-MIT-green)](./LICENSE)
+
+> 🧩 **已接入 dsh-std 生态（Community v0.15）**：本插件随包提供 `dsh-plugin.json` 静态清单与标准 **FacetModule 入口**（`dist/std/host.js`），可被 `@dsh-std/adapter-dsh` 等 dsh-std 标准宿主直接装载，**不依赖任何 `@deepseek-ai/*` 官方包**；同时保留 cordis 直连入口。两条入口共用同一套工具实现，编辑行为完全一致。
+
 **版本：`v0.4.1`**（当前） | 需要 `Node >= 22`；兼容 `dsh >= 0.1.1-rc.2`（cordis 直连）与 dsh-std Community v0.15 宿主
 
 DeepSeek Harness 插件 —— AI 修改 PDF 文字，自动保持原版式不变。

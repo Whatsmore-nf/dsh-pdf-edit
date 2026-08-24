@@ -2,6 +2,12 @@
 
 > English | [中文](./README.md)
 
+[![npm version](https://img.shields.io/npm/v/dsh-pdf-edit?color=blue&label=npm)](https://www.npmjs.com/package/dsh-pdf-edit)
+[![dsh-std Community v0.15](https://img.shields.io/badge/dsh--std-Community%20v0.15-6a4cff)](https://github.com/Whatsmore-nf/dsh-pdf-edit/blob/main/dsh-plugin.json)
+[![License: MIT](https://img.shields.io/badge/license-MIT-green)](./LICENSE)
+
+> 🧩 **dsh-std ecosystem ready (Community v0.15)**: ships a `dsh-plugin.json` static manifest and a standard **FacetModule entry** (`dist/std/host.js`), loadable by dsh-std hosts such as `@dsh-std/adapter-dsh` — **no `@deepseek-ai/*` packages required**; the legacy cordis entry is kept as-is. Both entries share the exact same tool implementations, so editing behavior is identical.
+
 DeepSeek Harness plugin — AI edits PDF text, automatically preserving the original layout.
 
 ## What Is This
