@@ -1,5 +1,7 @@
 # dsh-pdf-edit
-
+> ## 🚨 Temporary Maintenance Pause
+>
+> This project will be placed on a maintenance pause **for an extended period**. No updates will be made during this time. The plugin may continue to function for a while, but please use it at your own risk. A resumption date has not been set. We appreciate your understanding.
 > English | [中文](./README.md)
 
 [![npm version](https://img.shields.io/npm/v/dsh-pdf-edit?color=blue&label=npm)](https://www.npmjs.com/package/dsh-pdf-edit)

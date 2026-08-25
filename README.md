@@ -1,5 +1,7 @@
 # dsh-pdf-edit
-
+> ## 🚨 临时停更公告
+>
+> 本项目将暂停维护一段**较长的时间**。在此期间，不会进行更新，插件可能在一段时间内仍可正常使用，但请自行承担使用风险。恢复维护的时间待定，敬请谅解。
 > [English](./README.en.md) | 中文
 
 [![npm version](https://img.shields.io/npm/v/dsh-pdf-edit?color=blue&label=npm)](https://www.npmjs.com/package/dsh-pdf-edit)
