@@ -42,6 +42,7 @@ export * from "./extractor.js";
 export * from "./ai-editor.js";
 export * from "./validator.js";
 export * from "./native-renderer.js";
+export * from "./bg-sampler.js";
 export * from "./path-guard.js";
 export * from "./guard.js";
 export * from "./pdf-ops.js";

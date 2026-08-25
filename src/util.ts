@@ -78,6 +78,45 @@ export function median(nums: number[]): number {
   return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2;
 }
 
+export function clamp(v: number, lo: number, hi: number): number {
+  return Math.max(lo, Math.min(hi, v));
+}
+
+/**
+ * 容量上限缓存：Map 迭代顺序即插入顺序，get 命中后重插以刷新新鲜度，
+ * set 超容量时淘汰最久未访问的条目（LRU）。
+ */
+export class LRUCache<K, V> {
+  private map = new Map<K, V>();
+
+  constructor(readonly capacity: number) {}
+
+  get size(): number {
+    return this.map.size;
+  }
+
+  has(key: K): boolean {
+    return this.map.has(key);
+  }
+
+  get(key: K): V | undefined {
+    if (!this.map.has(key)) return undefined;
+    const val = this.map.get(key)!;
+    this.map.delete(key);
+    this.map.set(key, val);
+    return val;
+  }
+
+  set(key: K, value: V): void {
+    if (this.map.has(key)) this.map.delete(key);
+    else if (this.map.size >= this.capacity && this.capacity > 0) {
+      const first = this.map.keys().next().value;
+      if (first !== undefined) this.map.delete(first);
+    }
+    this.map.set(key, value);
+  }
+}
+
 export const sleep = (ms: number): Promise<void> =>
   new Promise((r) => setTimeout(r, ms));
 

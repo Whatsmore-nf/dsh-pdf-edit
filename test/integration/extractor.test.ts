@@ -125,3 +125,75 @@ describe("extractor/StyleLockedExtractor", () => {
     ).rejects.toThrow();
   });
 });
+
+describe("extractor/mergeRuns 自适应阈值（v0.4.5）", () => {
+  /**
+   * 构造同线多 run 文本：相邻间隙极小（~0.1em）→ 自适应 maxGap 收紧到下限
+   * 0.3；随后一个 0.35em 的间隙在新逻辑下不再合并（旧硬编码 0.45 会合并）。
+   */
+  async function gappyDoc() {
+    const { PDFDocument, StandardFonts } = await import("pdf-lib");
+    const probe = await PDFDocument.create();
+    const helvProbe = await probe.embedFont(StandardFonts.Helvetica);
+    const w = (s: string) => helvProbe.widthOfTextAtSize(s, 11);
+
+    const doc = await PDFDocument.create();
+    const page = doc.addPage([595.28, 841.89]);
+    const font = await doc.embedFont(StandardFonts.Helvetica);
+    const y = 700;
+    const size = 11;
+
+    const runs = [
+      { text: "aa", x: 72 }, // 紧凑词块：制造小间隙样本
+      { text: "bb", x: 72 + w("aa") + 2.1 }, // 间隙 ~0.19em
+      { text: "cc", x: 72 + w("aa") + 2.1 + w("bb") + 2.2 },
+      // 0.35em ≈ 3.85pt 的大间隙：旧 maxGapFactor(0.45*11=4.95) 会合并，
+      // 新自适应（median≈0.195 → clamp 下限 0.3 → 上限 3.3pt）不合并
+      {
+        text: "dd",
+        x: 72 + w("aa") + 2.1 + w("bb") + 2.2 + w("cc") + 3.85,
+      },
+    ];
+    for (const r of runs) {
+      page.drawText(r.text, { x: r.x, y, size, font });
+    }
+    return doc.save();
+  }
+
+  it("紧凑排版：大间隙 run 不再被旧硬编码阈值误合并", async () => {
+    const bytes = await gappyDoc();
+    const e = await StyleLockedExtractor.open(bytes);
+    const units = (await e.extractPage(1)).units.filter((u) =>
+      /^[abcd]{2}$|^(?:aa bb cc)(?: dd)?$/.test(u.text),
+    );
+    const texts = units.map((u) => u.text);
+    // aa/bb/cc 小间隙（~0.2em < 0.3 自适应上限）仍合并为一个单元（补空格）；
+    // dd（0.35em）因超出自适应上限保持独立
+    expect(texts).toContain("aa bb cc");
+    expect(texts).toContain("dd");
+  });
+
+  it("显式传入 maxGapFactor/spaceGapFactor 时沿用显式值（向后兼容）", async () => {
+    const bytes = await gappyDoc();
+    const e = await StyleLockedExtractor.open(bytes, {
+      maxGapFactor: 0.45,
+      spaceGapFactor: 0.18,
+    });
+    const texts = (await e.extractPage(1)).units.map((u) => u.text);
+    // 0.35em < 0.45em → 全部合并（与 v0.4.3 行为一致）
+    expect(texts).toContain("aa bb cc dd");
+  });
+
+  it("乱码检测：PUA/替换符占比过高时记 warnings，正常文本不记", async () => {
+    const e = await StyleLockedExtractor.open(
+      await fixture(FIXTURE_NAMES.enBasic),
+    );
+
+    (e as any).detectGarbledText([{ str: "\uE000\uE001\uE002x" }], 3);
+    expect(e.warnings.some((w) => w.includes("第 3 页"))).toBe(true);
+    expect(e.warnings.some((w) => w.includes("ToUnicode"))).toBe(true);
+
+    (e as any).detectGarbledText([{ str: "normal ascii text" }], 4);
+    expect(e.warnings.some((w) => w.includes("第 4 页"))).toBe(false);
+  });
+});

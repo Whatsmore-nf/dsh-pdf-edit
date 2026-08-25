@@ -1,6 +1,7 @@
 import { rgb, PDFFont, PDFDocument, StandardFonts } from "pdf-lib";
 import fontkit from "@pdf-lib/fontkit";
 import { existsSync, readFileSync } from "node:fs";
+import { LRUCache } from "./util.js";
 
 export interface CustomFontConfig {
   family: string;
@@ -117,6 +118,8 @@ export function toWinAnsiSafe(s: string): string {
 export class FontResolver {
   private fontCache = new Map<string, PDFFont>();
   private faceCache = new Map<string, Uint8Array>();
+  /** resolveA 结果缓存（LRU）：批量 applyPatches 高频调用时免重复解析 */
+  private resolveLRU = new LRUCache<string, ResolvedFont>(128);
   private rawCustom = new Map<string, Uint8Array>();
   private rawFallbacks: Array<{ key: string; bytes: Uint8Array }> = [];
   private rawCjk: Uint8Array | null | undefined;
@@ -165,39 +168,51 @@ export class FontResolver {
     italic: boolean,
   ): Promise<ResolvedFont> {
     const fam = normFamily(family);
+    const variant = (bold ? "b" : "") + (italic ? "i" : "");
 
-    if (this.rawCustom.has(fam)) {
-      return {
+    // LRU 命中直接返回：键含 family + 字重变体 + 是否 CJK/自定义
+    const kind = this.rawCustom.has(fam)
+      ? "custom"
+      : CJK_RE.test(text)
+        ? "cjk"
+        : "std";
+    const cacheKey = `${fam}|${variant}|${kind}`;
+    const cached = this.resolveLRU.get(cacheKey);
+    if (cached) return cached;
+
+    let result: ResolvedFont;
+
+    if (kind === "custom") {
+      result = {
         font: await this.embedCustom(fam, this.rawCustom.get(fam)!),
         standard: false,
         fakeBold: bold && this.fakeBoldOn,
       };
-    }
-
-    if (CJK_RE.test(text)) {
+    } else if (kind === "cjk") {
       const bytes = this.rawCustom.get("*") ?? (await this.cjkBytes());
-      if (bytes) {
-        return {
-          font: await this.embedCustom("cjk", bytes),
-          standard: false,
-          fakeBold: bold && this.fakeBoldOn,
-        };
+      if (!bytes) {
+        throw new Error(
+          `文本含 CJK 但无可用中文字体："${text.slice(0, 20)}…"（配置 fonts.cjk，或依赖系统字体自动探测）`,
+        );
       }
-      throw new Error(
-        `文本含 CJK 但无可用中文字体："${text.slice(0, 20)}…"（配置 fonts.cjk，或依赖系统字体自动探测）`,
-      );
+      result = {
+        font: await this.embedCustom("cjk", bytes),
+        standard: false,
+        fakeBold: bold && this.fakeBoldOn,
+      };
+    } else {
+      let font = this.fontCache.get(`${fam}|${variant}`);
+      if (!font) {
+        font = await this.doc.embedFont(
+          STD_MAP[baseOf(fam)][variant] ?? StandardFonts.Helvetica,
+        );
+        this.fontCache.set(`${fam}|${variant}`, font);
+      }
+      result = { font, standard: true, fakeBold: false };
     }
 
-    const variant = (bold ? "b" : "") + (italic ? "i" : "");
-    const key = `${fam}|${variant}`;
-    let font = this.fontCache.get(key);
-    if (!font) {
-      font = await this.doc.embedFont(
-        STD_MAP[baseOf(fam)][variant] ?? StandardFonts.Helvetica,
-      );
-      this.fontCache.set(key, font);
-    }
-    return { font, standard: true, fakeBold: false };
+    this.resolveLRU.set(cacheKey, result);
+    return result;
   }
 
   /**

@@ -1,5 +1,8 @@
 import { PDFDocument } from "pdf-lib";
+import type { BgSampleFn } from "./bg-sampler.js";
+import { extractFilledRects, makeBgSampler } from "./bg-sampler.js";
 import { AiTextEditor } from "./ai-editor.js";
+import { loadPdfjs } from "./pdfjs-lazy.js";
 import { StyleLockedExtractor } from "./extractor.js";
 import { FontResolver, type FontConfig } from "./fonts-resolver.js";
 import { buildFlowBlocks } from "./flow.js";
@@ -9,7 +12,7 @@ import { renderFlowDocument } from "./layout-flow.js";
 import { NativePageRenderer } from "./native-renderer.js";
 import { replaceEntireDocument, replacePages } from "./pdf-ops.js";
 import { applyPatches, type MeasureFn } from "./validator.js";
-import { chunk, hash32, pLimit, range } from "./util.js";
+import { chunk, hash32, LRUCache, pLimit, range } from "./util.js";
 
 import type {
   ChatFn,
@@ -33,6 +36,12 @@ export interface EditorOptions {
   glossary?: Glossary;
   fonts?: FontConfig;
   patchColor?: string;
+  /**
+   * 自动背景采样：native 绘制时从内容流采样补丁位置的实际背景色，
+   * 彩色/底纹背景上不再留白块。图片等无法采样的区域仍回退 patchColor。
+   * 默认 true；显式设为 false 可强制使用 patchColor。
+   */
+  autoPatchColor?: boolean;
   strictTids?: boolean;
   missingTidsUseOriginal?: boolean;
   renderMode?: "native" | "browser";
@@ -50,7 +59,9 @@ const nativeMeasure =
   };
 
 export class StyleLockedEditor {
-  private readonly extractCache = new Map<number, PageExtract>();
+  /** LRU：只保留最近访问的页面提取结果，大文档不再全量驻留内存（防 OOM） */
+  private readonly extractCache = new LRUCache<number, PageExtract>(20);
+  private readonly bgSamplers = new Map<number, BgSampleFn | null>();
   private readonly changedTidsByPage = new Map<number, Set<string>>();
   private browserRenderer?: import("./browser-renderer.js").BrowserRenderer;
 
@@ -70,6 +81,7 @@ export class StyleLockedEditor {
       strictColor: boolean;
       overflow: OverflowPolicy;
       patchColor: string;
+      autoPatchColor: boolean;
       strictTids: boolean;
       missingTidsUseOriginal: boolean;
       renderMode: "native" | "browser";
@@ -93,6 +105,7 @@ export class StyleLockedEditor {
       strictColor: false,
       overflow: { mode: "shrink", minFontSizePt: 6 } as OverflowPolicy,
       patchColor: "#ffffff",
+      autoPatchColor: true,
       strictTids: false,
       missingTidsUseOriginal: true,
       renderMode: "native" as const,
@@ -345,10 +358,40 @@ export class StyleLockedEditor {
             "旋转页暂不支持 native 直绘（可切 renderMode:'browser'）",
           );
         }
-        await renderer.renderPatches(page, w.ex, w.changedTids);
+        const sampleBg =
+          this.opts.autoPatchColor
+            ? (await this.getBgSampler(w.ex.pageNumber)) ?? undefined
+            : undefined;
+        await renderer.renderPatches(page, w.ex, w.changedTids, sampleBg);
       } catch (e) {
         this.lastFailures.push({ page: w.ex.pageNumber, error: e });
       }
+    }
+  }
+
+  /** 每页背景采样器懒加载 + 缓存（null 表示该页无可采样矢量矩形） */
+  private async getBgSampler(pageNumber: number): Promise<BgSampleFn | null> {
+    if (!this.bgSamplers.has(pageNumber)) {
+      this.bgSamplers.set(pageNumber, await this.createBgSampler(pageNumber));
+    }
+    return this.bgSamplers.get(pageNumber) ?? null;
+  }
+
+  private async createBgSampler(
+    pageNumber: number,
+  ): Promise<BgSampleFn | null> {
+    try {
+      const page = await this.extractor.getPdfPage(pageNumber);
+      if (!page) return null;
+      const pdfjs = await loadPdfjs();
+      const rects = await extractFilledRects(
+        page,
+        pdfjs.OPS,
+        page.getViewport({ scale: 1 }).height,
+      );
+      return rects.length ? makeBgSampler(rects) : null;
+    } catch {
+      return null;
     }
   }
 
@@ -360,6 +403,13 @@ export class StyleLockedEditor {
         strictColor: this.opts.strictColor,
       });
       this.extractCache.set(n, ex);
+    }
+    // 提取阶段警告（如 CID 字体乱码）转发给编辑器实例，供宿主展示
+    if (this.extractor.warnings.length) {
+      for (const w of this.extractor.warnings) {
+        if (!this.warnings.includes(w)) this.warnings.push(w);
+      }
+      this.extractor.warnings.length = 0;
     }
     return ex;
   }

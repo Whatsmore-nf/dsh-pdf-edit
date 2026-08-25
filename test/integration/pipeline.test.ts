@@ -216,6 +216,87 @@ describe("pipeline/relayout（native 重排版）", () => {
   );
 });
 
+describe("pipeline/背景色采样（native 直绘补丁）", () => {
+  /** 解出文档全部流内容，供内容流算符断言 */
+  async function allStreamText(bytes: Uint8Array): Promise<string> {
+    const { PDFDocument, PDFRawStream, decodePDFRawStream } = (await import(
+      "pdf-lib"
+    )) as any;
+    const doc = await PDFDocument.load(bytes);
+    let text = "";
+    for (const [, obj] of doc.context.enumerateIndirectObjects()) {
+      if (obj instanceof PDFRawStream) {
+        try {
+          const raw = decodePDFRawStream(obj).decode();
+          text +=
+            "\n" +
+            (typeof raw === "string"
+              ? raw
+              : Buffer.from(raw).toString("latin1"));
+        } catch {
+          /* 加密/异常流跳过 */
+        }
+      }
+    }
+    return text;
+  }
+
+  async function coloredBgPdf(): Promise<Uint8Array> {
+    const { PDFDocument, StandardFonts, rgb } = await import("pdf-lib");
+    const doc = await PDFDocument.create();
+    const helv = await doc.embedFont(StandardFonts.Helvetica);
+    const page = doc.addPage([595.28, 841.89]);
+    // 全页浅蓝背景（#e6f0ff）
+    page.drawRectangle({
+      x: 0,
+      y: 0,
+      width: 595.28,
+      height: 841.89,
+      color: rgb(0.9, 0.94, 1),
+    });
+    page.drawText("Quarterly revenue grew strongly this quarter", {
+      x: 72,
+      y: 700,
+      size: 11,
+      font: helv,
+    });
+    return doc.save();
+  }
+
+  it("彩色背景页：补丁用采样到的背景色而非白色", async () => {
+    const bytes = await coloredBgPdf();
+    const chat = scriptedChat([{ match: "grew", to: (t) => t.replace("grew", "expanded") }]);
+    const editor = await StyleLockedEditor.open(bytes, chat);
+
+    const out = await editor.editPage(1, "替换 grew");
+    expect(editor.lastFailures).toHaveLength(0);
+
+    const streams = await allStreamText(out);
+    // 原背景矩形填充色 op：0.9 0.94 1 rg
+    expect(streams).toMatch(/0\.9 0\.94 1 rg/);
+    // 采样补丁色 #e6f0ff → rgb(230/255, 240/255, 1)，与原背景 op 字面量不同
+    expect(streams).toMatch(/0\.9019607\d* 0\.9411764\d* 1 rg/);
+    // 不应出现白补丁（原文档无纯白填充）
+    expect(streams).not.toMatch(/(^|[\s])1 1 1 rg/);
+  }, 60_000);
+
+  it("autoPatchColor=false 时回退配置的 patchColor（白色）", async () => {
+    const bytes = await coloredBgPdf();
+    const chat = scriptedChat([{ match: "grew", to: (t) => t.replace("grew", "expanded") }]);
+    const editor = await StyleLockedEditor.open(bytes, chat, {
+      autoPatchColor: false,
+    });
+
+    const out = await editor.editPage(1, "替换 grew");
+    expect(editor.lastFailures).toHaveLength(0);
+
+    const streams = await allStreamText(out);
+    // 白补丁出现；无采样色字面量的第二处绘制
+    expect(streams).toMatch(/(^|[\s])1 1 1 rg/);
+    expect(streams).not.toMatch(/0\.9019607\d* 0\.9411764\d* 1 rg/);
+  }, 60_000);
+});
+
 describe("pipeline/browser 模式守卫与基础契约", () => {
   it("未配置 browserExecutablePath 时给出明确错误", async () => {
     const bytes = await fixture(FIXTURE_NAMES.enBasic);

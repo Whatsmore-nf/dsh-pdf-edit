@@ -14,6 +14,8 @@ import {
   estimateTextWidthPt,
   normalizeGlossary,
   applyGlossary,
+  clamp,
+  LRUCache,
 } from "../../src/util.js";
 
 describe("util/round1", () => {
@@ -150,5 +152,45 @@ describe("util/normalizeGlossary / applyGlossary", () => {
   it("applyGlossary 长词优先，避免短词破坏长词", () => {
     const terms = normalizeGlossary({ 数据: "DATA", 数据中台: "PLATFORM" });
     expect(applyGlossary("数据中台与数据", terms)).toBe("PLATFORM与DATA");
+  });
+});
+
+describe("util/clamp", () => {
+  it("上下界截断", () => {
+    expect(clamp(0.5, 0.3, 0.8)).toBe(0.5);
+    expect(clamp(0.1, 0.3, 0.8)).toBe(0.3);
+    expect(clamp(1.2, 0.3, 0.8)).toBe(0.8);
+  });
+});
+
+describe("util/LRUCache", () => {
+  it("超容量淘汰最久未访问条目（FIFO 语义）", () => {
+    const c = new LRUCache<string, number>(2);
+    c.set("a", 1);
+    c.set("b", 2);
+    c.set("c", 3); // 淘汰 a
+    expect(c.has("a")).toBe(false);
+    expect(c.get("b")).toBe(2);
+    expect(c.get("c")).toBe(3);
+  });
+
+  it("get 命中刷新新鲜度：被访问的条目不被淘汰", () => {
+    const c = new LRUCache<string, number>(2);
+    c.set("a", 1);
+    c.set("b", 2);
+    expect(c.get("a")).toBe(1); // a 变为最新
+    c.set("c", 3); // 淘汰 b 而非 a
+    expect(c.has("a")).toBe(true);
+    expect(c.has("b")).toBe(false);
+  });
+
+  it("覆盖已有键不增加容量、不触发淘汰", () => {
+    const c = new LRUCache<string, number>(2);
+    c.set("a", 1);
+    c.set("b", 2);
+    c.set("a", 10);
+    expect(c.size).toBe(2);
+    expect(c.get("a")).toBe(10);
+    expect(c.get("b")).toBe(2);
   });
 });

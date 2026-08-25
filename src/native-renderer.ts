@@ -2,6 +2,7 @@ import type { PDFPage } from "pdf-lib";
 import type { FontResolver, ResolvedFont } from "./fonts-resolver.js";
 import { toWinAnsiSafe } from "./fonts-resolver.js";
 import { ellipsizeByMeasure, hexToRgb, wrapByMeasure } from "./util.js";
+import type { BgSampleFn } from "./bg-sampler.js";
 import type { PageExtract } from "./types.js";
 
 export interface NativeRenderOptions {
@@ -18,9 +19,9 @@ export class NativePageRenderer {
     page: PDFPage,
     ex: PageExtract,
     changedTids: Set<string>,
+    sampleBg?: BgSampleFn,
   ): Promise<void> {
     const { height: H } = page.getSize();
-    const patch = hexToRgb(this.opts.patchColor ?? "#ffffff");
 
     for (const u of ex.units) {
       if (!changedTids.has(u.tid)) continue;
@@ -37,6 +38,20 @@ export class NativePageRenderer {
 
       const boxW = Math.max(u.width, measure(text)) + 2;
       const boxH = u.fontSize * 1.35;
+
+      // 背景采样命中 → 用实际背景色替代固定补丁色；未命中回退配置色
+      let patch = hexToRgb(this.opts.patchColor ?? "#ffffff");
+      if (sampleBg) {
+        const bg = sampleBg(u.x - 1, u.top, boxW + 2, boxH);
+        if (bg) {
+          try {
+            patch = hexToRgb(bg);
+          } catch {
+            /* 非法色值保持回退 */
+          }
+        }
+      }
+
       page.drawRectangle({
         x: u.x - 1,
         y: H - u.top - boxH,

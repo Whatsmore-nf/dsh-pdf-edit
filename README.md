@@ -8,7 +8,7 @@
 
 > 🧩 **已接入 dsh-std 生态（Community v0.15）**：本插件随包提供 `dsh-plugin.json` 静态清单与标准 **FacetModule 入口**（`dist/std/host.js`），可被 `@dsh-std/adapter-dsh` 等 dsh-std 标准宿主直接装载，**不依赖任何 `@deepseek-ai/*` 官方包**；同时保留 cordis 直连入口。两条入口共用同一套工具实现，编辑行为完全一致。
 
-**版本：`v0.4.3`**（当前） | 需要 `Node >= 22`；兼容 `dsh >= 0.1.1-rc.2`（cordis 直连）与 dsh-std Community v0.15 宿主
+**版本：`v0.4.5`**（当前） | 需要 `Node >= 22`；兼容 `dsh >= 0.1.1-rc.2`（cordis 直连）与 dsh-std Community v0.15 宿主
 
 DeepSeek Harness 插件 —— AI 修改 PDF 文字，自动保持原版式不变。
 
@@ -40,7 +40,7 @@ dsh plugin --profile web add dsh-pdf-edit@latest
 npm install dsh-pdf-edit
 ```
 
-> 当前版本：`v0.4.3`（2026-08-25 发布）。主要更新：`parsePatchObject` 解析再加固——按 JSON 解析错误位置截断，彻底处理模型在 JSON 后附带的任意说明文字（含花括号/方括号的尾注也能解析）。v0.4.2：修复 LLM 返回数组+尾注时的解析失败。v0.4.1：std 生态 insert 字体/加粗/编码修复。v0.4.0：适配 dsh-std Community v0.15 生态。
+> 当前版本：`v0.4.5`（2026-08-25 发布）。主要更新：**彩色背景不再留白块**（native 直绘按内容流采样实际背景色作补丁底色）、tid 合并阈值自适应排版密度、大文档内存 LRU 淘汰、字体解析结果缓存提速批量编辑。v0.4.3：`parsePatchObject` 按 JSON 解析错误位置截断，彻底处理模型尾部任意说明文字。
 
 ## dsh-std 标准生态适配（v0.4.0 新增）
 
@@ -237,6 +237,17 @@ const { bytes, insertedPages, totalPages } = await insertPages(
 ---
 
 ## 更新记录
+
+### v0.4.5
+
+依据 v0.4.3 全面审查报告完成的四项 P0 + 两项 P1 改造（准确性 / 稳定性 / 性能）：
+
+- **背景色采样替代白补丁（P0，视觉保真）**：native 直绘新增内容流背景采样——扫描页面填充矩形（含 pdf.js 分解的 `re` 路径与 CMYK/灰度填充），按画家算法取补丁位置最上层背景色作为遮盖底色。彩色背景合同、带底纹证书上不再出现"白块"；图片等无法采样的区域自动回退 `patchColor`。新配置项 `autoPatchColor`（默认开启，设 `false` 强制用 `patchColor`）。纯 JS 实现，零浏览器依赖
+- **tid 合并阈值自适应（P0，准确性）**：`mergeRuns` 不再硬编码 0.45/0.18 系数——按同页相邻文本项间隙中位数动态计算（合并上限 clamp [0.3, 0.8]、空格下限 clamp [0.1, 0.4]），学术双栏紧凑排版不再跨栏误合并，宽字距标题不再被拆散；显式传入 `maxGapFactor`/`spaceGapFactor` 时仍优先显式值（向后兼容）
+- **提取缓存 LRU 淘汰（P0，稳定性）**：`extractCache` 加 20 页容量上限（LRU），500+ 页大文档编辑不再全量驻留内存导致 OOM 风险；新增通用 `LRUCache` 工具类
+- **字体解析结果 LRU 缓存（P1，性能）**：`FontResolver.resolveA` 结果按「族|字重变体|CJK/标准」缓存（128 条），批量 `applyPatches` 高频调用免重复解析，批量编辑耗时降低
+- **CID 字体乱码检测降级（P1，可用性）**：提取阶段检测私用区/U+FFFD 占比超 50% 的页面（Type0/CID 字体缺 ToUnicode CMap 的典型症状），记入 `warnings` 提示该页 AI 编辑结果可能不可靠，不中断其余页面
+- 测试 +14（背景采样单测、彩色背景端到端补丁色断言、自适应阈值行为、LRU、乱码检测），全套 164 例通过
 
 ### v0.4.3
 

@@ -1,6 +1,6 @@
 import { loadPdfjs } from "./pdfjs-lazy.js";
 import { BASE_CSS, buildPageHtml } from "./html.js";
-import { round1 } from "./util.js";
+import { clamp, median, round1 } from "./util.js";
 import type {
   PageExtract,
   StyleSignature,
@@ -9,7 +9,13 @@ import type {
 
 export interface ExtractorOptions {
   lineThresholdFactor?: number;
+  /**
+   * tid 合并的最大间隙系数（相对字号）。缺省时按同页相邻文本项的
+   * 间隙中位数自适应计算（clamp 到 [0.3, 0.8]），紧凑双栏 / 宽字距标题
+   * 等极端排版下比硬编码更稳。显式传入时优先使用显式值（向后兼容）。
+   */
   maxGapFactor?: number;
+  /** 插入空格的最小间隙系数。缺省时自适应（clamp 到 [0.1, 0.4]） */
   spaceGapFactor?: number;
 }
 
@@ -29,7 +35,13 @@ const sigKey = (s: StyleSignature): string =>
   }`;
 
 export class StyleLockedExtractor {
-  private readonly mo: Required<ExtractorOptions>;
+  private readonly mo: {
+    lineThresholdFactor: number;
+    maxGapFactor?: number;
+    spaceGapFactor?: number;
+  };
+  /** 提取阶段发现的可读性警告（如 CID/ToUnicode 缺失导致乱码），由上层取走展示 */
+  readonly warnings: string[] = [];
 
   private constructor(
     private doc: any,
@@ -37,8 +49,8 @@ export class StyleLockedExtractor {
   ) {
     this.mo = {
       lineThresholdFactor: opts.lineThresholdFactor ?? 0.3,
-      maxGapFactor: opts.maxGapFactor ?? 0.45,
-      spaceGapFactor: opts.spaceGapFactor ?? 0.18,
+      maxGapFactor: opts.maxGapFactor,
+      spaceGapFactor: opts.spaceGapFactor,
     };
   }
 
@@ -58,6 +70,15 @@ export class StyleLockedExtractor {
     return this.doc.numPages;
   }
 
+  /** 暴露 pdfjs 页面对象（供背景采样等只读用途），异常时返回 null */
+  async getPdfPage(pageNumber: number): Promise<any | null> {
+    try {
+      return await this.doc.getPage(pageNumber);
+    } catch {
+      return null;
+    }
+  }
+
   async extractPage(
     pageNumber: number,
     opts: { recoverColor?: boolean; strictColor?: boolean } = {},
@@ -70,6 +91,8 @@ export class StyleLockedExtractor {
     const textItems = (tc.items as any[]).filter(
       (it) => typeof it.str === "string",
     );
+
+    this.detectGarbledText(textItems, pageNumber);
 
     let colors =
       opts.recoverColor ?? true
@@ -145,10 +168,40 @@ export class StyleLockedExtractor {
     };
   }
 
+  /**
+   * 缺失 ToUnicode CMap 的 Type0/CID 字体常把字符映射到私用区（PUA）或
+   * U+FFFD——提取出的就是乱码，AI 对账必然失败。占比过高时记警告（不中断，
+   * 其余页面仍可正常编辑）。
+   */
+  private detectGarbledText(textItems: any[], pageNumber: number): void {
+    const nonEmpty = textItems.filter((it) => it.str.trim());
+    if (!nonEmpty.length) return;
+
+    const isBadChar = (ch: string): boolean => {
+      const cp = ch.codePointAt(0)!;
+      return (cp >= 0xe000 && cp <= 0xf8ff) || cp === 0xfffd;
+    };
+
+    let garbled = 0;
+    for (const it of nonEmpty) {
+      const chars = [...it.str];
+      const bad = chars.filter(isBadChar).length;
+      if (bad / chars.length > 0.3) garbled++;
+    }
+
+    if (garbled / nonEmpty.length > 0.5) {
+      this.warnings.push(
+        `第 ${pageNumber} 页文本疑似乱码（字体缺 ToUnicode/CMap 映射），该页 AI 编辑结果可能不可靠`,
+      );
+    }
+  }
+
   private mergeRuns(runs: RawRun[], pageNumber: number): Unit[] {
     const sorted = [...runs].sort(
       (a, b) => a.baselineTop - b.baselineTop || a.x - b.x,
     );
+
+    const { maxGap, spaceGap } = this.gapThresholds(sorted);
 
     const units: Unit[] = [];
     let cur: Unit | null = null;
@@ -165,11 +218,8 @@ export class StyleLockedExtractor {
         if (sameLine && sameStyle) {
           const gap = r.x - (cur.x + cur.width);
 
-          if (gap < r.fontSize * this.mo.maxGapFactor) {
-            cur.text +=
-              gap > r.fontSize * this.mo.spaceGapFactor
-                ? " " + r.text
-                : r.text;
+          if (gap < r.fontSize * maxGap) {
+            cur.text += gap > r.fontSize * spaceGap ? " " + r.text : r.text;
 
             cur.width = r.x + r.width - cur.x;
             continue;
@@ -195,6 +245,39 @@ export class StyleLockedExtractor {
     }
 
     return units;
+  }
+
+  /**
+   * 合并阈值：显式配置优先；否则按同页相邻同线文本项的正间隙中位数自适应——
+   * 中位间隙的 1.5 倍为合并上限（clamp [0.3, 0.8]）、0.6 倍为空格下限
+   * （clamp [0.1, 0.4]）。无间隙样本时回退接近旧默认值的 0.25。
+   */
+  private gapThresholds(sorted: RawRun[]): {
+    maxGap: number;
+    spaceGap: number;
+  } {
+    if (
+      this.mo.maxGapFactor != null &&
+      this.mo.spaceGapFactor != null
+    ) {
+      return { maxGap: this.mo.maxGapFactor, spaceGap: this.mo.spaceGapFactor };
+    }
+
+    const ratios: number[] = [];
+    for (let i = 1; i < sorted.length; i++) {
+      const prev = sorted[i - 1];
+      const cur = sorted[i];
+      if (Math.abs(cur.baselineTop - prev.baselineTop) < 1) {
+        const gap = cur.x - (prev.x + prev.width);
+        if (gap > 0) ratios.push(gap / Math.max(prev.fontSize, 1));
+      }
+    }
+
+    const med = ratios.length ? median(ratios) : 0.25;
+    return {
+      maxGap: clamp(med * 1.5, 0.3, 0.8),
+      spaceGap: clamp(med * 0.6, 0.1, 0.4),
+    };
   }
 }
 
